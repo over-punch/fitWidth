@@ -27,7 +27,7 @@ export default function Home() {
 			<Hero
 				eyebrow="width-axis headline fitting"
 				title={[{ text: "Fill any width," }, { text: "exactly.", italic: true, subtle: true }]}
-				install="@liiift-studio/fitwidth"
+				install="@overpunch/fitwidth"
 				github="https://github.com/Liiift-Studio/fitWidth"
 				tech={["TypeScript", "Zero dependencies", "React + Vanilla JS"]}
 			>
@@ -76,7 +76,7 @@ export default function Home() {
 				<div className="flex flex-col gap-8 text-sm">
 					<div className="flex flex-col gap-3">
 						<p className="text-muted">Drop-in component</p>
-						<CodeBlock code={`import { FitWidthText } from '@liiift-studio/fitwidth'
+						<CodeBlock code={`import { FitWidthText } from '@overpunch/fitwidth'
 
 <FitWidthText prefer="auto">
   Display Headline
@@ -84,14 +84,14 @@ export default function Home() {
 					</div>
 					<div className="flex flex-col gap-3">
 						<p className="text-muted">Hook — attach to any element</p>
-						<CodeBlock code={`import { useFitWidth } from '@liiift-studio/fitwidth'
+						<CodeBlock code={`import { useFitWidth } from '@overpunch/fitwidth'
 
 const ref = useFitWidth({ prefer: 'auto' })
 <h1 ref={ref}>Display Headline</h1>`} />
 					</div>
 					<div className="flex flex-col gap-3">
 						<p className="text-muted">Vanilla JS</p>
-						<CodeBlock code={`import { applyFitWidth, removeFitWidth } from '@liiift-studio/fitwidth'
+						<CodeBlock code={`import { applyFitWidth, removeFitWidth } from '@overpunch/fitwidth'
 
 const el = document.querySelector('h1')
 applyFitWidth(el, { prefer: 'auto' })
@@ -126,7 +126,7 @@ removeFitWidth(el)`} />
 			</section>
 
 			<PortsSection
-				npm="@liiift-studio/fitwidth"
+				npm="@overpunch/fitwidth"
 				bundle="fitwidth"
 				attr="data-fitwidth" figma="partial"
 				framerComponent="FitWidth"

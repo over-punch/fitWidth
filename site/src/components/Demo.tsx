@@ -3,8 +3,8 @@
 // Interactive demo: drag a width slider (or move cursor/tilt/angular) to see headlines fill their container exactly
 import { useState, useEffect, useCallback, useLayoutEffect, useRef, useMemo } from "react"
 import { useMediaQuery, useClientValue } from "@/lib/clientValue"
-import { applyFitWidth } from "@liiift-studio/fitwidth"
-import type { FitWidthOptions } from "@liiift-studio/fitwidth"
+import { applyFitWidth } from "@overpunch/fitwidth"
+import type { FitWidthOptions } from "@overpunch/fitwidth"
 
 type PreferMode = NonNullable<FitWidthOptions['prefer']>
 

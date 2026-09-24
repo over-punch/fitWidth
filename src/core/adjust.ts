@@ -1,9 +1,9 @@
 // fitWidth/src/core/adjust.ts — framework-agnostic binary-search width fitting algorithm.
-// Measurement runs through an injectable MeasureBackend (from @liiift-studio/measure-core),
+// Measurement runs through an injectable MeasureBackend (from @overpunch/measure-core),
 // so the same search ports to non-DOM hosts (Figma temp node, InDesign composer). The DOM
 // path measures candidates on an off-screen probe, writing the visible element only once.
 
-import { DomMeasureBackend, type MeasureBackend } from '@liiift-studio/measure-core'
+import { DomMeasureBackend, type MeasureBackend } from '@overpunch/measure-core'
 import type { FitWidthOptions } from './types'
 
 // ─── Saved-state registry ─────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ import { useEffect, useRef } from "react"
 import { addPropertyControls, ControlType } from "framer"
 // Pin to a published version so shared instances stay stable. Bump when the core changes.
 // The core is framework-agnostic (operates on a DOM element), so no React externalisation is needed.
-import { applyFitWidth, removeFitWidth } from "https://esm.sh/@liiift-studio/fitwidth@1.0.18"
+import { applyFitWidth, removeFitWidth } from "https://esm.sh/@overpunch/fitwidth@1.0.18"
 
 /** Props surfaced to the Framer UI via addPropertyControls, plus base text styling.
  *  Option fields are declared explicitly so the component needs no type import over HTTP. */
