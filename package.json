@@ -1,5 +1,5 @@
 {
-	"name": "@liiift-studio/fitwidth",
+	"name": "@overpunch/fitwidth",
 	"version": "1.0.19",
 	"description": "Binary-search wdth axis and letter-spacing to fit a display headline to an exact target width",
 	"type": "module",
@@ -38,7 +38,7 @@
 		}
 	},
 	"devDependencies": {
-		"@liiift-studio/measure-core": "^0.0.1",
+		"@overpunch/measure-core": "^0.0.1",
 		"@testing-library/react": "^16.3.2",
 		"@testing-library/user-event": "^14.6.1",
 		"@types/react": "^19.0.0",

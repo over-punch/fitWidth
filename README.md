@@ -1,6 +1,6 @@
 # fitWidth
 
-[![npm](https://img.shields.io/npm/v/%40liiift-studio%2Ffitwidth.svg)](https://www.npmjs.com/package/@liiift-studio/fitwidth) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![part of liiift type-tools](https://img.shields.io/badge/liiift-type--tools-blueviolet)](https://github.com/Liiift-Studio/type-tools)
+[![npm](https://img.shields.io/npm/v/%40liiift-studio%2Ffitwidth.svg)](https://www.npmjs.com/package/@overpunch/fitwidth) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![part of liiift type-tools](https://img.shields.io/badge/liiift-type--tools-blueviolet)](https://github.com/Liiift-Studio/type-tools)
 
 CSS has no native way to stretch or compress a display headline to fill an exact container width without changing font-size. `fitWidth` binary-searches the `wdth` variable font axis — and falls back to `letter-spacing` — to close that gap precisely. Type size stays constant; only inter-glyph geometry changes.
 
@@ -8,7 +8,7 @@ CSS has no native way to stretch or compress a display headline to fill an exact
 
 **[▶ Try the live demo at fitwidth.com](https://fitwidth.com)** — drag a slider and watch headlines re-fit in real time.
 
-[npm](https://www.npmjs.com/package/@liiift-studio/fitwidth) · [GitHub](https://github.com/Liiift-Studio/fitWidth)
+[npm](https://www.npmjs.com/package/@overpunch/fitwidth) · [GitHub](https://github.com/Liiift-Studio/fitWidth)
 
 TypeScript · Zero dependencies · React + Vanilla JS
 
@@ -17,7 +17,7 @@ TypeScript · Zero dependencies · React + Vanilla JS
 ## Install
 
 ```bash
-npm install @liiift-studio/fitwidth
+npm install @overpunch/fitwidth
 ```
 
 **Requirements:** any modern browser. The core relies on `getBoundingClientRect`, `font-variation-settings`, and (for live re-fitting) `ResizeObserver` and `document.fonts.ready` — all available in current Chrome, Edge, Firefox, and Safari. React is an optional peer dependency (`>=17`); the vanilla API needs no framework.
@@ -35,7 +35,7 @@ npm install @liiift-studio/fitwidth
 ### React component
 
 ```tsx
-import { FitWidthText } from '@liiift-studio/fitwidth'
+import { FitWidthText } from '@overpunch/fitwidth'
 
 <FitWidthText as="h1" axis="wdth" axisMin={75} axisMax={125}>
   The quick brown fox
@@ -47,7 +47,7 @@ The default `as` element is `'h1'`. Pass any valid HTML element type — `'h2'`,
 ### React hook
 
 ```tsx
-import { useFitWidth } from '@liiift-studio/fitwidth'
+import { useFitWidth } from '@overpunch/fitwidth'
 
 // Inside a React component:
 const ref = useFitWidth({ axis: 'wdth', axisMin: 75, axisMax: 125 })
@@ -59,7 +59,7 @@ The hook re-runs automatically on resize via `ResizeObserver` and after fonts fi
 ### Vanilla JS
 
 ```ts
-import { applyFitWidth, removeFitWidth } from '@liiift-studio/fitwidth'
+import { applyFitWidth, removeFitWidth } from '@overpunch/fitwidth'
 
 const el = document.querySelector('h1')
 const opts = { axis: 'wdth', axisMin: 75, axisMax: 125 }
@@ -82,7 +82,7 @@ ro.observe(el)
 ### TypeScript
 
 ```ts
-import type { FitWidthOptions } from '@liiift-studio/fitwidth'
+import type { FitWidthOptions } from '@overpunch/fitwidth'
 
 const opts: FitWidthOptions = {
   target: 'container',
