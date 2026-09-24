@@ -1,14 +1,14 @@
 # fitWidth
 
-[![npm](https://img.shields.io/npm/v/%40liiift-studio%2Ffitwidth.svg)](https://www.npmjs.com/package/@overpunch/fitwidth) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![part of liiift type-tools](https://img.shields.io/badge/liiift-type--tools-blueviolet)](https://github.com/Liiift-Studio/type-tools)
+[![npm](https://img.shields.io/npm/v/%40overpunch%2Ffitwidth.svg)](https://www.npmjs.com/package/@overpunch/fitwidth) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![part of liiift type-tools](https://img.shields.io/badge/liiift-type--tools-blueviolet)](https://github.com/over-punch/type-tools)
 
 CSS has no native way to stretch or compress a display headline to fill an exact container width without changing font-size. `fitWidth` binary-searches the `wdth` variable font axis — and falls back to `letter-spacing` — to close that gap precisely. Type size stays constant; only inter-glyph geometry changes.
 
-<img src="https://raw.githubusercontent.com/Liiift-Studio/fitWidth/main/assets/hero.png?v=1" alt="The word Typography rendered at one font size in three containers of decreasing width — 100%, 64%, and 40% — each filled flush to the edge by condensing the wdth variable font axis." width="100%">
+<img src="https://raw.githubusercontent.com/over-punch/fitWidth/main/assets/hero.png?v=1" alt="The word Typography rendered at one font size in three containers of decreasing width — 100%, 64%, and 40% — each filled flush to the edge by condensing the wdth variable font axis." width="100%">
 
 **[▶ Try the live demo at fitwidth.com](https://fitwidth.com)** — drag a slider and watch headlines re-fit in real time.
 
-[npm](https://www.npmjs.com/package/@overpunch/fitwidth) · [GitHub](https://github.com/Liiift-Studio/fitWidth)
+[npm](https://www.npmjs.com/package/@overpunch/fitwidth) · [GitHub](https://github.com/over-punch/fitWidth)
 
 TypeScript · Zero dependencies · React + Vanilla JS
 
@@ -117,7 +117,7 @@ const opts: FitWidthOptions = {
 
 CSS leaves a display headline ragged inside its container; `applyFitWidth` closes the gap so the headline sits flush to both edges — same font, same size.
 
-<img src="https://raw.githubusercontent.com/Liiift-Studio/fitWidth/main/assets/before-after.png?v=1" alt="The same headline Display Type in two identical containers: above, plain CSS leaves a large gap on the right; below, applyFitWidth expands the wdth axis so the text reaches both edges." width="100%">
+<img src="https://raw.githubusercontent.com/over-punch/fitWidth/main/assets/before-after.png?v=1" alt="The same headline Display Type in two identical containers: above, plain CSS leaves a large gap on the right; below, applyFitWidth expands the wdth axis so the text reaches both edges." width="100%">
 
 **Binary search algorithm:** `applyFitWidth` reads the element's current width using `getBoundingClientRect()`, then bisects the search space up to 20 times per pass. Each iteration sets `el.style.fontVariationSettings` or `el.style.letterSpacing` directly and re-measures. The loop exits early once the gap falls within `tolerance` pixels.
 
@@ -125,7 +125,7 @@ CSS leaves a display headline ragged inside its container; `applyFitWidth` close
 
 The three `prefer` modes fill the same width by different means — `'axis'` widens the glyphs themselves, `'tracking'` widens the gaps between them, and `'auto'` uses the axis first and only falls back to tracking when the axis range runs out:
 
-<img src="https://raw.githubusercontent.com/Liiift-Studio/fitWidth/main/assets/prefer-modes.png?v=1" alt="The word Headline fitted to one width three ways: prefer axis gives wider letterforms, prefer tracking keeps the default letterforms with wider spacing between them, and prefer auto uses the wdth axis." width="100%">
+<img src="https://raw.githubusercontent.com/over-punch/fitWidth/main/assets/prefer-modes.png?v=1" alt="The word Headline fitted to one width three ways: prefer axis gives wider letterforms, prefer tracking keeps the default letterforms with wider spacing between them, and prefer auto uses the wdth axis." width="100%">
 
 **No innerHTML rewriting:** Unlike line-based tools in this suite, `fitWidth` operates on a single element and never wraps content in spans or rewrites `innerHTML`. It modifies only `el.style.fontVariationSettings` and `el.style.letterSpacing`. The original inline values are saved in a `WeakMap` on the first call; subsequent calls reset from those saved values before re-fitting, making repeated invocations idempotent. `removeFitWidth` restores the saved originals and clears the entry.
 

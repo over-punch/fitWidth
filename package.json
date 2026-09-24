@@ -78,10 +78,10 @@
 	"homepage": "https://fitwidth.com",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/Liiift-Studio/fitWidth.git"
+		"url": "git+https://github.com/over-punch/fitWidth.git"
 	},
 	"bugs": {
-		"url": "https://github.com/Liiift-Studio/fitWidth/issues"
+		"url": "https://github.com/over-punch/fitWidth/issues"
 	},
 	"sideEffects": false,
 	"publishConfig": {

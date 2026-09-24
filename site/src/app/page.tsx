@@ -28,7 +28,7 @@ export default function Home() {
 				eyebrow="width-axis headline fitting"
 				title={[{ text: "Fill any width," }, { text: "exactly.", italic: true, subtle: true }]}
 				install="@overpunch/fitwidth"
-				github="https://github.com/Liiift-Studio/fitWidth"
+				github="https://github.com/over-punch/fitWidth"
 				tech={["TypeScript", "Zero dependencies", "React + Vanilla JS"]}
 			>
 				<p className="text-base leading-relaxed max-w-lg">
@@ -130,7 +130,7 @@ removeFitWidth(el)`} />
 				bundle="fitwidth"
 				attr="data-fitwidth" figma="partial"
 				framerComponent="FitWidth"
-				repo="Liiift-Studio/FitWidth"
+				repo="over-punch/FitWidth"
 			/>
 
 			<SiteFooter current="fitWidth" npmVersion={version} siteVersion={siteVersion} />
