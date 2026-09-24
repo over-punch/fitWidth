@@ -32,7 +32,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 	return (
 		<html lang="en" className={`h-full antialiased ${inter.variable}`}>
 			<body className="min-h-full flex flex-col">
-				<SiteHeader current="fitWidth" githubUrl="https://github.com/Liiift-Studio/fitWidth" />{children}</body>
+				<SiteHeader current="fitWidth" githubUrl="https://github.com/over-punch/fitWidth" />{children}</body>
 		</html>
 	)
 }
