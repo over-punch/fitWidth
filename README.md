@@ -20,7 +20,7 @@ TypeScript · Zero dependencies · React + Vanilla JS
 npm install @overpunch/fitwidth
 ```
 
-**Requirements:** any modern browser. The core relies on `getBoundingClientRect`, `font-variation-settings`, and (for live re-fitting) `ResizeObserver` and `document.fonts.ready` — all available in current Chrome, Edge, Firefox, and Safari. React is an optional peer dependency (`>=17`); the vanilla API needs no framework.
+**Requirements:** any modern browser. The core relies on `getBoundingClientRect`, `font-variation-settings`, and (for live re-fitting) `ResizeObserver` and `document.fonts.ready` — all available in current Chrome, Edge, Firefox, and Safari. React is an optional peer dependency (`>=17`). The main entry also exports the hook and component, so it imports `react`; without React installed, import the vanilla API from the React-free subpath: `import { applyFitWidth } from '@overpunch/fitwidth/core'`.
 
 ---
 
@@ -101,13 +101,13 @@ const opts: FitWidthOptions = {
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `target` | `'container'` | Width to fill. `'container'` fills the parent element's `getBoundingClientRect().width` (a sub-pixel float, CSS-transform–aware). Pass a `number` for an exact pixel target. Pass an `HTMLElement` to match the rendered width of another element |
-| `prefer` | `'auto'` | Strategy to use. `'auto'` tries the `wdth` axis first, then refines with `letter-spacing` if needed. `'axis'` uses the axis only (sets `letter-spacing` to 0 first). `'tracking'` uses `letter-spacing` only and leaves `font-variation-settings` unchanged |
+| `target` | `'container'` | Width to fill. `'container'` fills the parent's content box (padding and borders excluded, sub-pixel, and correct inside a scaled parent). Pass a `number` for an exact pixel target. Pass an `HTMLElement` to match another element's content width. `null` (a React ref not attached yet) means `'container'` |
+| `prefer` | `'auto'` | Strategy to use. `'auto'` tries the `wdth` axis first, then refines with `letter-spacing` if needed. `'axis'` uses the axis only (no tracking is added; your own `letter-spacing` is kept). It warns if the axis doesn't change the font's width. `'tracking'` uses `letter-spacing` only and leaves `font-variation-settings` unchanged |
 | `axis` | `'wdth'` | Variable font axis tag to adjust when `prefer` is `'auto'` or `'axis'`. Any four-character OpenType axis tag is valid (e.g. `'wdth'`, `'wght'`, `'XTRA'`) |
 | `axisMin` | `75` | Minimum axis value for the binary search |
 | `axisMax` | `125` | Maximum axis value for the binary search |
-| `maxTracking` | `0.3` | Maximum absolute `letter-spacing` in em. The result is clamped to ±this value |
-| `tolerance` | `0.5` | Convergence tolerance in pixels. The search stops when the remaining gap is within this value |
+| `maxTracking` | `0.3` | Maximum absolute `letter-spacing` in em, added to your own letter-spacing. The result is clamped to ±this value. At −0.3em glyphs can collide; lower it if a narrow container is possible |
+| `tolerance` | `0.5` | Convergence tolerance in pixels. The fitted text is never wider than the target, and at most this much narrower, so a heading without `white-space: nowrap` doesn't wrap |
 | `respectReducedMotion` | `false` | When `true`, checks `prefers-reduced-motion: reduce` before fitting. If the user has enabled reduced motion, `applyFitWidth` returns early without modifying any styles. The React hook also listens for OS-level changes to the preference and re-evaluates automatically |
 | `as` | `'h1'` | HTML element to render. Accepts any valid React element type. *(React component only)* |
 
@@ -119,7 +119,13 @@ CSS leaves a display headline ragged inside its container; `applyFitWidth` close
 
 <img src="https://raw.githubusercontent.com/over-punch/fitWidth/main/assets/before-after.png?v=1" alt="The same headline Display Type in two identical containers: above, plain CSS leaves a large gap on the right; below, applyFitWidth expands the wdth axis so the text reaches both edges." width="100%">
 
-**Binary search algorithm:** `applyFitWidth` reads the element's current width using `getBoundingClientRect()`, then bisects the search space up to 20 times per pass. Each iteration sets `el.style.fontVariationSettings` or `el.style.letterSpacing` directly and re-measures. The loop exits early once the gap falls within `tolerance` pixels.
+**Binary search algorithm:** `applyFitWidth` measures a hidden copy of the element placed beside it in the same parent, so the copy renders exactly as the element does: nested markup, your letter-spacing and word-spacing, `text-transform`, `white-space`, `font-size-adjust` and any transform on the parent. It bisects the search space up to 20 times per pass, changing only the copy, then writes the visible element once. The loop exits early once the text fits within `tolerance` pixels of the target.
+
+**Limits:**
+- The axis must widen the text as its value rises (`wdth`, `XTRA`, often `wght`). An axis that doesn't (`opsz`) won't converge.
+- Text that is still too wide at the ends of the axis and tracking ranges overflows, with a console warning.
+- `fitWidth` fits a single line. A `<br>` makes the text two lines, and the fit then follows the longer line.
+- The vanilla API measures whichever font is loaded when it runs: call it after `document.fonts.ready`.
 
 **`prefer: 'auto'` strategy:** The axis search runs first. If the best axis value still leaves a gap larger than `tolerance` — because the target is outside the font's axis range — a second binary search over `letter-spacing` runs from the current position to close the remaining difference. Axis variation is always preferred over tracking when available, because it preserves the designer's intended glyph shapes.
 
@@ -127,9 +133,9 @@ The three `prefer` modes fill the same width by different means — `'axis'` wid
 
 <img src="https://raw.githubusercontent.com/over-punch/fitWidth/main/assets/prefer-modes.png?v=1" alt="The word Headline fitted to one width three ways: prefer axis gives wider letterforms, prefer tracking keeps the default letterforms with wider spacing between them, and prefer auto uses the wdth axis." width="100%">
 
-**No innerHTML rewriting:** Unlike line-based tools in this suite, `fitWidth` operates on a single element and never wraps content in spans or rewrites `innerHTML`. It modifies only `el.style.fontVariationSettings` and `el.style.letterSpacing`. The original inline values are saved in a `WeakMap` on the first call; subsequent calls reset from those saved values before re-fitting, making repeated invocations idempotent. `removeFitWidth` restores the saved originals and clears the entry.
+**No innerHTML rewriting:** Unlike line-based tools in this suite, `fitWidth` operates on a single element and never wraps content in spans or rewrites `innerHTML`. It modifies only `el.style.fontVariationSettings` and `el.style.letterSpacing`. The original inline values are saved in a `WeakMap` on the first call; subsequent calls reset from those saved values before re-fitting, making repeated invocations idempotent. If you (or a framework re-render) change either value after a fit, the new value becomes the original. `removeFitWidth` restores the saved originals, leaves no empty `style` attribute behind, and clears the entry.
 
-**ResizeObserver built in:** The React hook and Vanilla JS example both observe the container with `ResizeObserver`. Callbacks are debounced with `requestAnimationFrame` and deduplicated by integer pixel width — the fit only re-runs when the container actually changes width.
+**ResizeObserver built in:** The React hook and Vanilla JS example both observe the container with `ResizeObserver`. The hook also refits when the element's text changes, and follows the element if React replaces it (a conditional remount, or a changed `as`). The Webflow embed refits on container resizes, late font loads and `[data-fitwidth]` elements added after the page loads; `data-fw-target` also accepts a percentage of the container, and `data-fitwidth="false"` opts out. Callbacks are debounced with `requestAnimationFrame` and deduplicated by integer pixel width — the fit only re-runs when the container actually changes width.
 
 **`document.fonts.ready` timing:** Browser width measurements before a web font loads return metrics for the fallback font, producing an incorrect fit. The hook and Vanilla JS example both call `document.fonts.ready.then(run)` to re-run once the real font is available.
 
