@@ -7,15 +7,18 @@ export interface FitWidthOptions {
 	 *
 	 * - **'container'** — fill the parent element's getBoundingClientRect().width (sub-pixel float, transform-aware)
 	 * - **number** — exact pixel target
-	 * - **HTMLElement** — match the rendered width of another element
+	 * - **HTMLElement** — match the content width of another element
+	 *
+	 * 'container' and an element use the content box (padding and borders excluded) in layout px,
+	 * so a transformed (scaled) parent works too. `null` (a React ref not yet attached) means 'container'.
 	 */
-	target?: 'container' | number | HTMLElement
+	target?: 'container' | number | HTMLElement | null
 
 	/**
 	 * Which strategy to use. Default: 'auto'
 	 *
 	 * - **'auto'** — try the wdth axis first (if available), fall back to letter-spacing
-	 * - **'axis'** — wdth axis only (letter-spacing is set to 0 first)
+	 * - **'axis'** — wdth axis only (no tracking added; the author's own letter-spacing is kept)
 	 * - **'tracking'** — letter-spacing only (font-variation-settings left unchanged)
 	 */
 	prefer?: 'auto' | 'axis' | 'tracking'
@@ -31,10 +34,16 @@ export interface FitWidthOptions {
 	/** Maximum axis value for the binary search. Default: 125 */
 	axisMax?: number
 
-	/** Maximum absolute letter-spacing in em (clamped to ±this value). Default: 0.3 */
+	/**
+	 * Maximum absolute letter-spacing in em added on top of the author's own (clamped to ±this value).
+	 * Default: 0.3. Note that −0.3em can squeeze glyphs into each other; lower it for body faces.
+	 */
 	maxTracking?: number
 
-	/** Convergence tolerance in pixels — search stops when gap is within this value. Default: 0.5 */
+	/**
+	 * Convergence tolerance in pixels. The fitted text is never wider than the target and at most
+	 * this much narrower. Default: 0.5
+	 */
 	tolerance?: number
 
 	/**
