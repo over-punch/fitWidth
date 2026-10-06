@@ -47,7 +47,8 @@ export const FitWidthText = forwardRef<HTMLElement, FitWidthTextProps>(
 		ref,
 	) {
 		const fitOptions: FitWidthOptions = { target, prefer, axis, axisMin, axisMax, maxTracking, tolerance, respectReducedMotion }
-		const innerRef = useFitWidth(fitOptions)
+		// A new style prop makes React rewrite the inline style, which drops the fit: refit after it.
+		const innerRef = useFitWidth(fitOptions, style ? JSON.stringify(style) : '')
 
 		/** Callback ref that satisfies both the forwarded ref and the internal hook ref */
 		const mergedRef = useCallback(

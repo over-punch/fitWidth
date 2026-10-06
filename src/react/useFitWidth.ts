@@ -1,6 +1,6 @@
 // fitWidth/src/react/useFitWidth.ts — React hook that applies fitWidth on mount and resize
 
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { applyFitWidth } from '../core/adjust'
 import type { FitWidthOptions } from '../core/types'
 
@@ -12,8 +12,21 @@ import type { FitWidthOptions } from '../core/types'
  * @param options - FitWidthOptions (merged with defaults inside applyFitWidth)
  * @returns A MutableRefObject to attach to the target headline element
  */
-export function useFitWidth(options: FitWidthOptions = {}) {
-	const ref = useRef<HTMLElement | null>(null)
+export function useFitWidth(options: FitWidthOptions = {}, refitKey?: unknown) {
+	// A ref that re-renders when React attaches a different element (conditional remount, a
+	// changed `as`), so the effects below move to the new element instead of keeping the old one.
+	const [node, setNode] = useState<HTMLElement | null>(null)
+	const ref = useMemo(() => {
+		let current: HTMLElement | null = null
+		return {
+			get current() { return current },
+			set current(el: HTMLElement | null) {
+				if (el === current) return
+				current = el
+				setNode(el)
+			},
+		}
+	}, [])
 	const optionsRef = useRef(options)
 	optionsRef.current = options
 
@@ -27,7 +40,7 @@ export function useFitWidth(options: FitWidthOptions = {}) {
 		const el = ref.current
 		if (!el) return
 		applyFitWidth(el, optionsRef.current)
-	}, [target, prefer, axis, axisMin, axisMax, maxTracking, tolerance, respectReducedMotion])
+	}, [target, prefer, axis, axisMin, axisMax, maxTracking, tolerance, respectReducedMotion, refitKey])
 
 	// Keep mountedRef current alongside the component lifecycle
 	useEffect(() => {
@@ -40,10 +53,24 @@ export function useFitWidth(options: FitWidthOptions = {}) {
 	useLayoutEffect(() => {
 		run()
 
-		if (typeof ResizeObserver === 'undefined') return
-
-		const el = ref.current
+		const el = node
 		if (!el) return
+
+		// Refit when the text changes (fitWidth only writes inline styles, so React's updates to the
+		// text land normally; they just need a new fit). Attribute changes aren't observed, so the
+		// fit's own style writes don't retrigger it.
+		let moRaf = 0
+		const mo = typeof MutationObserver !== 'undefined'
+			? new MutationObserver(() => {
+				cancelAnimationFrame(moRaf)
+				moRaf = requestAnimationFrame(run)
+			})
+			: null
+		mo?.observe(el, { childList: true, characterData: true, subtree: true })
+
+		if (typeof ResizeObserver === 'undefined') {
+			return () => { mo?.disconnect(); cancelAnimationFrame(moRaf) }
+		}
 
 		// Observe the container (parent) rather than the fitted element itself.
 		// If the element exhausts its axis/tracking range it becomes shorter than the
@@ -65,9 +92,11 @@ export function useFitWidth(options: FitWidthOptions = {}) {
 
 		return () => {
 			ro.disconnect()
+			mo?.disconnect()
 			cancelAnimationFrame(rafId)
+			cancelAnimationFrame(moRaf)
 		}
-	}, [run])
+	}, [run, node])
 
 	// Re-run after fonts finish loading — measurements before font-swap produce
 	// incorrect widths and the fit will be off until the real font is available.
