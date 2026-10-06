@@ -1,6 +1,7 @@
 // fitWidth/src/webflow/embed.ts — zero-config browser bundle for Webflow Custom Code Embed.
 // Fits any element marked with [data-fitwidth] to its target width, reading options from
-// data-* attributes, and re-fits on viewport resize. Exposes a small window.FitWidth API.
+// data-* attributes, and re-fits when a container resizes, when fonts load and when new
+// [data-fitwidth] elements are added. Exposes a small window.FitWidth API.
 import { applyFitWidth, removeFitWidth } from '../core/adjust'
 import type { FitWidthOptions } from '../core/types'
 
@@ -15,7 +16,7 @@ const tracked = new Set<HTMLElement>()
  * Unset attributes fall through to the library defaults.
  *
  * Supported attributes:
- *   data-fw-target       — 'container' (default) or a pixel number
+ *   data-fw-target       — 'container' (default), a pixel number, or a percentage of the container
  *   data-fw-prefer       — auto | axis | tracking
  *   data-fw-axis         — variable font axis tag (default 'wdth')
  *   data-fw-axis-min     — axis search lower bound
@@ -30,8 +31,11 @@ function readOptions(el: HTMLElement): FitWidthOptions {
 	const opts: FitWidthOptions = {}
 
 	if (d.fwTarget) {
-		const n = parseFloat(d.fwTarget)
-		opts.target = isNaN(n) ? 'container' : n
+		const raw = d.fwTarget.trim()
+		const n = parseFloat(raw)
+		if (isNaN(n)) opts.target = 'container'
+		else if (raw.endsWith('%')) opts.target = (containerWidth(el) * n) / 100
+		else opts.target = n
 	}
 	if (d.fwPrefer === 'auto' || d.fwPrefer === 'axis' || d.fwPrefer === 'tracking') {
 		opts.prefer = d.fwPrefer
@@ -45,14 +49,49 @@ function readOptions(el: HTMLElement): FitWidthOptions {
 	return opts
 }
 
+/** The content width of an element's parent in px (padding and borders excluded). */
+function containerWidth(el: HTMLElement): number {
+	const parent = el.parentElement
+	if (!parent) return 0
+	const cs = getComputedStyle(parent)
+	const px = (v: string) => parseFloat(v) || 0
+	return parent.clientWidth - px(cs.paddingLeft) - px(cs.paddingRight)
+}
+
+/** Whether an element opts in: the attribute is present and not "false". */
+function optedIn(el: Element): el is HTMLElement {
+	const v = el.getAttribute(OPT_IN_ATTR)
+	return v !== null && v.trim().toLowerCase() !== 'false'
+}
+
+/** Watches each fitted element's container, so a container resize (not only the window) refits. */
+const resizeObserver = typeof ResizeObserver !== 'undefined'
+	? new ResizeObserver((entries) => {
+		const parents = new Set(entries.map((e) => e.target))
+		cancelAnimationFrame(roRaf)
+		roRaf = requestAnimationFrame(() => {
+			tracked.forEach((el) => { if (el.parentElement && parents.has(el.parentElement)) fitOne(el) })
+		})
+	})
+	: null
+let roRaf = 0
+
+/** Fits one tracked element, or stops tracking it if it has left the page. */
+function fitOne(el: HTMLElement): void {
+	if (!el.isConnected) { tracked.delete(el); return }
+	applyFitWidth(el, readOptions(el))
+}
+
 /**
  * Fit a single element and register it for resize re-fitting.
  *
  * @param el - Element to fit
  */
 function fitElement(el: HTMLElement): void {
+	if (!optedIn(el)) return
 	applyFitWidth(el, readOptions(el))
 	tracked.add(el)
+	if (el.parentElement) resizeObserver?.observe(el.parentElement)
 }
 
 /**
@@ -60,7 +99,7 @@ function fitElement(el: HTMLElement): void {
  * so repeated calls are idempotent.
  */
 function refit(): void {
-	tracked.forEach((el) => applyFitWidth(el, readOptions(el)))
+	tracked.forEach(fitOne)
 }
 
 /**
@@ -103,6 +142,21 @@ function autoInit(): void {
 			init()
 		}
 		window.addEventListener('resize', onResize)
+		// Fonts that load later change glyph widths.
+		document.fonts?.addEventListener?.('loadingdone', onResize)
+		// Elements added later (CMS lists, interactions) are fitted when they appear.
+		if (typeof MutationObserver !== 'undefined') {
+			new MutationObserver((records) => {
+				for (const rec of records) {
+					rec.addedNodes.forEach((n) => {
+						// Skip fitWidth's own measuring clone (added and removed during a fit).
+						if (!(n instanceof HTMLElement) || !n.isConnected || n.hasAttribute('data-fitwidth-probe')) return
+						if (n.matches(`[${OPT_IN_ATTR}]`)) fitElement(n)
+						n.querySelectorAll<HTMLElement>(`[${OPT_IN_ATTR}]`).forEach(fitElement)
+					})
+				}
+			}).observe(document.body, { childList: true, subtree: true })
+		}
 	}
 	if (document.readyState === 'loading') {
 		document.addEventListener('DOMContentLoaded', run, { once: true })
