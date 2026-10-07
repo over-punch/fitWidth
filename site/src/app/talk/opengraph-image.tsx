@@ -1,0 +1,11 @@
+// Open Graph image for fitwidth.com/talk, rendered by the shared talk OG component in fitWidth's palette.
+import { talkOgImage, TALK_OG_SIZE } from '../../components/talk/talkOg'
+
+export const alt = 'Width, Font Size, Tracking: Who Really Does the Fitting? Slides'
+export const size = TALK_OG_SIZE
+export const contentType = 'image/png'
+
+/** Renders this route's OG image. */
+export default function Image() {
+	return talkOgImage({ tool: 'fitWidth', eyebrow: 'A talk · Fit Width', title: ['Width, size, tracking:', 'who does the fitting?'], footnote: '97 of 1,950 families have a width axis. Median reach: 80% to 113%.', path: 'fitwidth.com/talk' })
+}

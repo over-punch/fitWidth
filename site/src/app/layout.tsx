@@ -32,7 +32,17 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 	return (
 		<html lang="en" className={`h-full antialiased ${inter.variable}`}>
 			<body className="min-h-full flex flex-col">
-				<SiteHeader current="fitWidth" githubUrl="https://github.com/over-punch/fitWidth" />{children}</body>
+				<SiteHeader
+					current="fitWidth"
+					githubUrl="https://github.com/over-punch/fitWidth"
+					sections={[
+						{ label: 'Demo', href: '/#demo' },
+						{ label: 'How it works', href: '/#how' },
+						{ label: 'Usage', href: '/#usage' },
+						{ label: 'Paper', href: '/paper' },
+						{ label: 'Talk', href: '/talk' },
+					]}
+				/>{children}</body>
 		</html>
 	)
 }

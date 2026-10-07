@@ -43,6 +43,9 @@ export default function Home() {
 				<p className="text-base leading-relaxed max-w-xl">
 					In most fonts the axis is a fine adjustment. Across 21 Google Fonts families with a <code className="text-sm font-mono">wdth</code> axis, values 75&ndash;125 moved a headline to a median of 80% to 113% of its natural width; a few fonts drawn for width reach much further. When a box is further away than the axis can reach, something else is doing the fitting. The demo below shows what, for any headline and box you choose.
 				</p>
+				<p className="text-sm text-muted leading-relaxed max-w-xl">
+					The measurements are written up in a <a href="/paper" className="underline underline-offset-2 hover:text-foreground">paper</a> and a short <a href="/talk" className="underline underline-offset-2 hover:text-foreground">talk</a>, with the <a href="/paper/data" className="underline underline-offset-2 hover:text-foreground">data</a>.
+				</p>
 			</Hero>
 
 			{/* Demo */}
