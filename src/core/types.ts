@@ -114,7 +114,9 @@ export interface FitWidthResult {
 	 * Where each stage ended. `axis` is 'inert' when the axis doesn't change this text's width
 	 * (the font doesn't have it, or the characters come from a fallback font). `tracking` is 'stepped' when no letter-spacing value lands on the
 	 * target: any non-zero letter-spacing turns a font's ligatures off, which jumps the width, and a
-	 * target inside that jump can't be reached by tracking. A stage that wasn't used is null.
+	 * target inside that jump can't be reached by tracking. `tracking` is 'inert' when letter-spacing
+	 * doesn't change this text's width at all (a single letter has no gaps to space). A stage that
+	 * wasn't used is null.
 	 */
-	limits: { axis: FitWidthLimit | 'inert'; size: FitWidthLimit; tracking: FitWidthLimit | 'stepped' }
+	limits: { axis: FitWidthLimit | 'inert'; size: FitWidthLimit; tracking: FitWidthLimit | 'stepped' | 'inert' }
 }

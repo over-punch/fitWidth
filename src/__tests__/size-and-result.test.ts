@@ -4,8 +4,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { applyFitWidth, removeFitWidth } from '../core/adjust'
 import type { FitWidthResult } from '../core/types'
 
-/** Number of letters in the mocked text ("Fit"). */
-const LETTERS = 3
+/** Number of letters in the mocked text ("Fit"); a test may set it to 1 for a one-letter headline. */
+let LETTERS = 3
 
 /** The font's own wdth range in the mock: values outside it are clamped, as a browser does. */
 const FONT_WDTH = { min: 75, max: 125 }
@@ -63,7 +63,7 @@ function make(style = 'font-size: 100px') {
 
 let restore: (() => void) | null = null
 beforeEach(() => { document.body.innerHTML = ''; vi.spyOn(console, 'warn').mockImplementation(() => {}) })
-afterEach(() => { restore?.(); restore = null; ligatureJump = 0; vi.restoreAllMocks() })
+afterEach(() => { restore?.(); restore = null; ligatureJump = 0; LETTERS = 3; vi.restoreAllMocks() })
 
 describe('the result object', () => {
 	it('reports a fit the axis reached on its own', () => {
@@ -420,5 +420,21 @@ describe('tracking lands the last letter on the target', () => {
 		const msg = (console.warn as unknown as { mock: { calls: string[][] } }).mock.calls.map((c) => c[0]).find((m) => m.includes('wider than its target')) ?? ''
 		expect(msg).toContain('axisMin/axisMax')
 		expect(msg).not.toContain('maxTracking')
+	})
+})
+
+describe('a one-letter headline', () => {
+	it('reports tracking as inert, adds none, and does not blame a ligature', () => {
+		// One letter has no gaps: the mocked width ignores letter-spacing once the trailing space is taken off.
+		LETTERS = 1
+		restore = mockLayout(900)
+		const { el } = make()
+		const r = applyFitWidth(el) as FitWidthResult
+		expect(r.status).toBe('short')
+		expect(r.limits.tracking).toBe('inert')
+		expect(r.tracking).toBe(0)
+		expect(r.ratios.tracking).toBe(1)
+		expect(el.style.marginRight).toBe('')
+		expect(r.width).toBe(500)
 	})
 })

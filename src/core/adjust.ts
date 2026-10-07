@@ -542,13 +542,23 @@ export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): F
 			const t = searchTracking(backend, text, fvs, sizePx, maxTracking, tolerance, targetWidth, 20, sized)
 			tracking = t.value
 			finalGap = t.gap
-			// Not on target and not at the cap either: the width jumps past the target between two
-			// neighbouring values (any letter-spacing turns a font's ligatures off), so none lands on it.
-			limits.tracking = inRange(t.gap) ? null : Math.abs(t.value) < maxTracking * 0.999 ? 'stepped' : t.value < 0 ? 'min' : 'max'
-			el.style.letterSpacing = spacing(t.value)
+			if (inRange(t.gap)) limits.tracking = null
+			else {
+				// Off target. Letter-spacing may do nothing to this text (a single letter has no gaps to
+				// space); it may have hit its cap; or the width may jump past the target between two
+				// neighbouring values (any letter-spacing turns a font's ligatures off).
+				const at = (em: number) => backend.measureText(text, { fontVariationSettings: fvs, letterSpacing: em * sizePx, fontSize: sized }).width
+				if (maxTracking > 0 && Math.abs(at(maxTracking) - at(-maxTracking)) < 0.05) {
+					limits.tracking = 'inert'
+					tracking = 0
+					finalGap = at(0) - targetWidth
+				} else if (Math.abs(t.value) >= maxTracking * 0.999) limits.tracking = t.value < 0 ? 'min' : 'max'
+				else limits.tracking = 'stepped'
+			}
+			el.style.letterSpacing = spacing(tracking)
 			// Cancel the space the browser adds after the last letter, so the element's box ends where
 			// its last letter does (and negative tracking doesn't leave the last letter outside the box).
-			if (t.value !== 0) el.style.marginRight = baseMargin === 0 ? `${-t.value}em` : `calc(${baseMargin}px + ${-t.value}em)`
+			if (tracking !== 0) el.style.marginRight = baseMargin === 0 ? `${-tracking}em` : `calc(${baseMargin}px + ${-tracking}em)`
 		} else if (sized !== undefined && baseSpacing !== '0px') {
 			// The clone was measured with the author's spacing in em: write the same on the element.
 			el.style.letterSpacing = baseSpacing

@@ -47,7 +47,7 @@ export default function Home() {
 
 			{/* Demo */}
 			<section id="demo" className="w-full max-w-2xl lg:max-w-5xl flex flex-col gap-4 scroll-mt-28 sm:scroll-mt-20">
-				<h2 className="text-xs uppercase tracking-[0.18em] font-medium text-muted">Live demo: one headline, one box, four ways to fit it</h2>
+				<h2 className="text-xs uppercase tracking-[0.18em] font-medium text-muted">Live demo: one headline, one box, four strategies</h2>
 				<div className="rounded-xl -mx-4 sm:-mx-8 px-4 sm:px-8 py-8" style={{ background: "var(--panel)", overflow: 'hidden' }}>
 					<Demo />
 				</div>
@@ -72,7 +72,7 @@ export default function Home() {
 					</div>
 					<div className="flex flex-col gap-3">
 						<p className="font-semibold text-base">It tells you when it can&rsquo;t</p>
-						<p>A fit is never wider than its target and at most <code className="text-xs font-mono">tolerance</code> (0.5 px) narrower. When the ranges you allow can&rsquo;t reach the target, the text is left short or overflowing; it isn&rsquo;t forced. An overflow prints one console warning per page; falling short prints nothing. From the next release <code className="text-xs font-mono">applyFitWidth</code> also returns what each stage did for every fit, which is what the demo prints <Next />.</p>
+						<p>A fit&rsquo;s measured (advance) width is never wider than its target and at most <code className="text-xs font-mono">tolerance</code> (0.5 px) narrower; a letter&rsquo;s ink can overhang that by a few pixels, as in any text. When the ranges you allow can&rsquo;t reach the target, the text is left short or overflowing; it isn&rsquo;t forced. An overflow prints a console warning, once for each combination of levers; falling short prints nothing. From the next release <code className="text-xs font-mono">applyFitWidth</code> also returns what each stage did for every fit, which is what the demo prints <Next />.</p>
 					</div>
 				</div>
 				<div className="flex flex-col gap-3 text-sm leading-relaxed">
@@ -83,7 +83,7 @@ export default function Home() {
 						<li>Values outside a font&rsquo;s own <code className="text-xs font-mono">wdth</code> range are clamped by the browser, so searching 75&ndash;125 in a font that has 75&ndash;100 finds nothing above 100.</li>
 						<li>Any non-zero letter-spacing turns off a font&rsquo;s ligatures. If your headline has one (an &ldquo;fi&rdquo;, say), the width jumps when tracking starts, and a target inside that jump can&rsquo;t be reached by tracking.</li>
 						<li>At &minus;0.3em letters can collide. Lower <code className="text-xs font-mono">maxTracking</code> if a narrow box is possible.</li>
-						<li>In npm 1.1.0, a fit that adds tracking counts the space the browser puts after the last letter, so the last letter ends short of the edge by the tracking amount (or past it, with negative tracking): a median of 9 px off in our 21-font test, and up to 20 px. The repository fixes this, so the demo already shows the corrected behaviour <Next />.</li>
+						<li>In npm 1.1.0, a fit that adds tracking counts the space the browser puts after the last letter, so the last letter ends short of the edge by the tracking amount (or past it, with negative tracking): a median of 9 px off in our 21-font test, and up to 20 px. The repository fixes this, so the demo already shows the corrected behaviour: the third row is the default&rsquo;s order of steps, not 1.1.0&rsquo;s exact output <Next />. The fix cancels the trailing space with a right margin; inside a container with <code className="text-xs font-mono">overflow: auto</code> that space can still count as scrollable width, so use <code className="text-xs font-mono">overflow: hidden</code> or <code className="text-xs font-mono">clip</code> there.</li>
 						<li>The search assumes the axis widens the text as its value rises. An axis that doesn&rsquo;t (<code className="text-xs font-mono">opsz</code>) won&rsquo;t converge.</li>
 						<li><code className="text-xs font-mono">size</code> changes the element&rsquo;s height. Text that is scaled to fit is also a known way to fail WCAG 1.4.4 (Resize Text); the CSS Working Group is discussing a default 200% limit for that reason, and <code className="text-xs font-mono">size: true</code> stops at 2&times;.</li>
 					</ul>

@@ -14,6 +14,10 @@ interface DemoFont {
 	id: string
 	/** Name shown in the picker */
 	label: string
+	/** The family's plain name, used in sentences and to find it in the measured chart */
+	name: string
+	/** True when the font has an optical-size axis that follows font size */
+	opsz?: boolean
 	/** CSS font-family value */
 	family: string
 	/** The font's own wdth axis range from its fvar table, or null when it has no wdth axis */
@@ -24,11 +28,11 @@ interface DemoFont {
 
 /** The demo fonts. wdth ranges were read from each file's fvar table (fontTools, 2026-10-07). */
 const FONTS: DemoFont[] = [
-	{ id: 'roboto-flex', label: 'Roboto Flex', family: "'Roboto Flex', sans-serif", wdth: [25, 151], note: 'A wide axis (25–151) that also has an optical-size axis, so its reach changes with font size.' },
-	{ id: 'roboto', label: 'Roboto', family: "'FW Roboto', sans-serif", wdth: [75, 100], note: 'Narrows only (75–100): it has no width above normal.' },
-	{ id: 'merriweather', label: 'Merriweather', family: "'Merriweather', serif", wdth: [87, 112], note: 'A small range (87–112).' },
-	{ id: 'anybody', label: 'Anybody', family: "'FW Anybody', sans-serif", wdth: [50, 150], note: 'Drawn for width (50–150): the exception. Its axis reaches further than most, and further still with “Font’s full range”.' },
-	{ id: 'inter', label: 'Inter (no wdth axis)', family: 'var(--font-sans), sans-serif', wdth: null, note: 'No wdth axis: the axis step does nothing, and there is no range to search.' },
+	{ id: 'roboto-flex', label: 'Roboto Flex', name: 'Roboto Flex', opsz: true, family: "'Roboto Flex', sans-serif", wdth: [25, 151], note: 'A wide axis (25–151) that also has an optical-size axis, so its reach changes with font size.' },
+	{ id: 'roboto', label: 'Roboto', name: 'Roboto', family: "'FW Roboto', sans-serif", wdth: [75, 100], note: 'Narrows only (75–100): it has no width above normal.' },
+	{ id: 'merriweather', label: 'Merriweather', name: 'Merriweather', opsz: true, family: "'Merriweather', serif", wdth: [87, 112], note: 'A small range (87–112).' },
+	{ id: 'anybody', label: 'Anybody', name: 'Anybody', family: "'FW Anybody', sans-serif", wdth: [50, 150], note: 'Drawn for width (50–150): the exception. Its axis reaches further than most, and further still with “Font’s full range”.' },
+	{ id: 'inter', label: 'Inter (no wdth axis)', name: 'Inter', family: 'var(--font-sans), sans-serif', wdth: null, note: 'No wdth axis: the axis step does nothing, and there is no range to search.' },
 ]
 
 /** fitWidth's default wdth search range. */
@@ -210,13 +214,15 @@ function Figure({ name, value, factor, note }: { name: string; value: string; fa
 
 /** Plain-words verdict for a fit result. */
 function verdict(r: FitWidthResult): string {
-	if (r.status === 'fit') return `Fits: the last letter ends at ${px(r.width)} in a ${px(r.target)} box.`
+	if (r.status === 'fit') return `Fits: the text measures ${px(r.width)} in a ${px(r.target)} box.`
 	// No letter-spacing value lands on the target: any spacing splits this font's ligatures, which jumps the width.
 	const why = r.limits.tracking === 'stepped'
 		? 'Tracking can’t land on this width: any letter-spacing turns off the font’s ligatures, and the width jumps past the box.'
-		: 'Every range it may use has run out.'
-	if (r.status === 'short') return `Falls ${px(-r.gap)} short: the last letter ends at ${px(r.width)} in a ${px(r.target)} box. ${why}`
-	return `Overflows by ${px(r.gap)}: the last letter ends at ${px(r.width)} in a ${px(r.target)} box. ${why}`
+		: r.limits.tracking === 'inert'
+			? 'Letter-spacing can’t change this text’s width: a single letter has no gaps to space. Every other range it may use has run out.'
+			: 'Every range it may use has run out.'
+	if (r.status === 'short') return `Falls ${px(-r.gap)} short: the text measures ${px(r.width)} in a ${px(r.target)} box. ${why}`
+	return `Overflows by ${px(r.gap)}: the text measures ${px(r.width)} in a ${px(r.target)} box. ${why}`
 }
 
 /**
@@ -263,12 +269,14 @@ function StrategyRow({ strategy, text, font, rangeMin, rangeMax, fontSize, boxPc
 	// What this row's fit cost, in plain words: the spacing it changed, or the height it changed.
 	const costs: string[] = []
 	if (r && usesTracking && Math.abs(r.tracking) > SIZED_TRACKING + 0.0005) {
-		costs.push(`${r.tracking > 0 ? 'Letters spread apart' : 'Letters pushed together'} by ${em(Math.abs(r.tracking)).slice(1)} each: ${(Math.abs(r.tracking) / SIZED_TRACKING).toFixed(1)}× the ${SIZED_TRACKING}em the last row allows.${r.tracking < -0.1 ? ' At this much negative tracking letters can overlap.' : ''}`)
+		costs.push(`${r.tracking > 0 ? 'Letters spread apart' : 'Letters pushed together'} by ${em(Math.abs(r.tracking)).slice(1)} each: ${(Math.abs(r.tracking) / SIZED_TRACKING).toFixed(1)}× the ${SIZED_TRACKING}em the last row allows.${r.tracking < -0.1 ? ' At this much negative tracking the letters run into each other: it “fits” by width only.' : ''}`)
 	}
 	if (r && usesTracking && r.tracking !== 0 && r.limits.tracking !== 'stepped') costs.push('Any letter-spacing also turns off the font’s ligatures.')
-	if (r && usesSize && Math.abs(r.fontSize - fontSize) > 0.05) costs.push(`The type is now ${+r.fontSize.toFixed(1)} px, not ${fontSize} px, so the line is ${r.fontSize > fontSize ? 'taller' : 'shorter'}: leave room for it.`)
+	if (r && usesSize && Math.abs(r.fontSize - fontSize) > 0.05) costs.push(r.fontSize > fontSize
+		? `The type is now ${+r.fontSize.toFixed(1)} px, not ${fontSize} px, so the line is taller: leave room for it.`
+		: `The type is now ${+r.fontSize.toFixed(1)} px, not the ${fontSize} px you set: smaller type, and less of the line’s height used.`)
 	const sizeNote = !r ? undefined : r.limits.size === 'max' ? `the ${SIZE_RANGE[1]}× limit` : r.limits.size === 'min' ? `the ${SIZE_RANGE[0]}× limit` : undefined
-	const trackingNote = !r ? undefined : r.limits.tracking === 'stepped' ? 'no value lands on the box' : r.limits.tracking ? 'at its cap' : undefined
+	const trackingNote = !r ? undefined : r.limits.tracking === 'stepped' ? 'no value lands on the box' : r.limits.tracking === 'inert' ? 'no effect on one letter' : r.limits.tracking ? 'at its cap' : undefined
 
 	return (
 		<div className="flex flex-col gap-2" data-strategy={strategy.id} data-status={r?.status ?? 'pending'}>
@@ -352,12 +360,13 @@ function Band({ row, from, to, label }: { row: number; from: number; to: number;
  * marked and the font chosen in the demo highlighted. Static data: see MEASURED.
  */
 function MeasuredStrip({ current }: { current: string }) {
+	/** Position of a share of natural width on the chart's 50%–150% scale. */
 	const pos = (share: number) => `${Math.min(100, Math.max(0, ((share - 0.5) / 1) * 100))}%`
 	return (
 		<div className="flex flex-col gap-3" data-measured>
 			<h3 className="text-xs uppercase tracking-[0.18em] font-medium text-muted">The same reach in 21 font families</h3>
 			<p className="text-sm leading-relaxed">
-				How far wdth 75–125 moves a headline in 21 Google Fonts families that have the axis, as a share of its natural width. The median is <strong>80% to 113%</strong>. Six can’t widen at all. A few reach much further: those were drawn for width.
+				How far wdth 75–125 moves a headline in 21 Google Fonts families that have the axis, as a share of its natural width. The median narrowest is <strong>80%</strong> and the median widest is <strong>113%</strong> (two separate medians: no single font has exactly that range). Six can’t widen at all. A few reach much further: those were drawn for width.
 			</p>
 			<div role="img" aria-label={`Reach of wdth 75 to 125 in 21 families, from ${MEASURED.map(([n, lo, hi]) => `${n} ${Math.round(lo * 100)} to ${Math.round(hi * 100)} percent`).join('; ')}. Median 80 to 113 percent.`} className="flex flex-col gap-[3px]">
 				{MEASURED.map(([name, lo, hi]) => {
@@ -377,7 +386,10 @@ function MeasuredStrip({ current }: { current: string }) {
 				})}
 			</div>
 			<p className="text-xs text-muted">
-				Scale: 50% to 150%. Dashed line: natural width (100%). Shaded band: the median, 80–113%. Each font was searched over 75–125 or as much of that as it has. Mean of five headline strings at 72 px, weight 400, measured in Chromium 149 on 7 October 2026; these 21 are a hand-picked sample of the 97 Google Fonts families with a wdth axis. This chart is fixed data. The ruler above is live, so its numbers differ with your headline and size.
+				Scale: 50% to 150%. Dashed line: natural width (100%). Shaded band: the median, 80–113%. Each font was searched over 75–125 or as much of that as it has. Mean of five headline strings at 72 px, weight 400, measured in Chromium 149 on 7 October 2026; these 21 are a hand-picked sample of the 97 Google Fonts families with a wdth axis, and the sample is kinder to the axis than the whole set: 6 of these 21 can’t widen, against 49 of the 97. This chart is fixed data. The ruler above is live, so its numbers differ with your headline and size.
+			</p>
+			<p className="text-sm leading-relaxed" data-grid>
+				We also ran the library on these 21 fonts: one headline (“Headline fitting”, 72 px) and 16 target widths, from 0.5× to 2× its natural width in steps of 0.1×, which makes 336 fits. With <strong>wdth alone, 75 of the 336 fit</strong>. That count includes the 21 targets at exactly 1.0×, where nothing has to move: without them it is 54 of 315. Tracking alone (±{DEFAULT_TRACKING}em) fit 260, wdth then tracking 286, and wdth then font size then ±{SIZED_TRACKING}em fit all 336. Those shares describe this grid of targets, not headlines in general.
 			</p>
 		</div>
 	)
@@ -419,9 +431,11 @@ export default function Demo() {
 	const showGyro = isTouch && hasOrientation
 
 	const font = FONTS.find(f => f.id === fontId) ?? FONTS[0]
-	const [rangeMin, rangeMax] = searchRange(font, fullRange)
+	const [rangeMin, rangeMax] = searchRange(font, fullRange && !!font.wdth && (font.wdth[0] < DEFAULT_RANGE[0] || font.wdth[1] > DEFAULT_RANGE[1]))
 	// The part of the searched range this font really has (browsers clamp the rest).
 	const [gotMin, gotMax] = [rendered(rangeMin, font), rendered(rangeMax, font)]
+	// "Font's full range" only changes anything when the font has more than the default 75–125.
+	const hasMore = !!font.wdth && (font.wdth[0] < DEFAULT_RANGE[0] || font.wdth[1] > DEFAULT_RANGE[1])
 	const effectiveBoxPct = gyroMode ? gyroBoxPct : boxPct
 	const shownText = text.trim() ? text : PRESETS[0]
 
@@ -465,7 +479,7 @@ export default function Demo() {
 	useEffect(() => {
 		if (!cursorMode) return
 		const handleMove = (e: MouseEvent) => {
-			setBoxPct(Math.round(20 + (e.clientX / window.innerWidth) * (100 - 20)))
+			setBoxPct(Math.round(10 + (e.clientX / window.innerWidth) * (100 - 10)))
 		}
 		const handleKey = (e: KeyboardEvent) => {
 			if (e.key === 'Escape') setCursorMode(false)
@@ -487,8 +501,8 @@ export default function Demo() {
 			rafId = requestAnimationFrame(() => {
 				rafId = null
 				if (e.gamma !== null) {
-					// gamma: -90 (tilt left) to 90 (tilt right) → box width 20–100%
-					setGyroBoxPct(Math.round(20 + ((e.gamma + 90) / 180) * (100 - 20)))
+					// gamma: -90 (tilt left) to 90 (tilt right) → box width 10–100%
+					setGyroBoxPct(Math.round(10 + ((e.gamma + 90) / 180) * (100 - 10)))
 				}
 			})
 		}
@@ -563,7 +577,7 @@ export default function Demo() {
 						<span className="tabular-nums">{fontSize} px</span>
 					</div>
 					<input
-						type="range" min={24} max={120} step={1} value={fontSize}
+						type="range" min={14} max={120} step={1} value={fontSize}
 						aria-label="Font size in pixels"
 						aria-valuetext={`${fontSize} pixels`}
 						onChange={e => setFontSize(Number(e.target.value))}
@@ -578,7 +592,7 @@ export default function Demo() {
 						<span className="tabular-nums">{Math.round(effectiveBoxPct)}%{boxPx ? ` · ${Math.round(boxPx)} px` : ''}</span>
 					</div>
 					<input
-						type="range" min={20} max={100} step={1} value={boxPct}
+						type="range" min={10} max={100} step={1} value={boxPct}
 						aria-label="Box width as a percentage of the demo"
 						aria-valuetext={`${Math.round(effectiveBoxPct)} percent`}
 						title={cursorMode || gyroMode ? "Disabled while cursor or tilt mode is active" : "Drag to resize the box; every row re-fits to the new width"}
@@ -613,10 +627,10 @@ export default function Demo() {
 				<div className="flex flex-col gap-1" role="group" aria-label="wdth search range">
 					<div className={labelClass}><span>wdth range searched</span><span className="tabular-nums">{font.wdth ? `${rangeMin}–${rangeMax}` : 'no axis'}</span></div>
 					<div className="flex flex-wrap gap-2">
-						<button onClick={() => setFullRange(false)} aria-pressed={!!font.wdth && !fullRange} disabled={!font.wdth} className="text-xs px-3 py-1 rounded-full border" style={{ ...chip(!!font.wdth && !fullRange), opacity: font.wdth ? undefined : 0.4 }}>
+						<button onClick={() => setFullRange(false)} aria-pressed={!!font.wdth && !(fullRange && hasMore)} disabled={!font.wdth} className="text-xs px-3 py-1 rounded-full border" style={{ ...chip(!!font.wdth && !(fullRange && hasMore)), opacity: font.wdth ? undefined : 0.4 }}>
 							Default 75–125
 						</button>
-						<button onClick={() => setFullRange(true)} aria-pressed={!!font.wdth && fullRange} disabled={!font.wdth} className="text-xs px-3 py-1 rounded-full border" style={{ ...chip(!!font.wdth && fullRange), opacity: font.wdth ? undefined : 0.4 }}>
+						<button onClick={() => setFullRange(true)} aria-pressed={hasMore && fullRange} disabled={!hasMore} title={hasMore ? undefined : 'This font has nothing outside 75–125, so there is no wider range to search'} className="text-xs px-3 py-1 rounded-full border" style={{ ...chip(hasMore && fullRange), opacity: hasMore ? undefined : 0.4 }}>
 							Font’s full range{font.wdth ? ` ${font.wdth[0]}–${font.wdth[1]}` : ''}
 						</button>
 					</div>
@@ -625,7 +639,7 @@ export default function Demo() {
 
 			<p className="text-xs text-muted -mt-4">
 				{font.note}
-				{font.wdth && !fullRange && (font.wdth[0] > DEFAULT_RANGE[0] || font.wdth[1] < DEFAULT_RANGE[1]) && ` fitWidth searches 75–125 by default, but this font only has ${font.wdth[0]}–${font.wdth[1]}: the browser clamps anything outside it, so only ${gotMin}–${gotMax} has any effect, and both range buttons give the same result here.`}
+				{font.wdth && !(fullRange && hasMore) && (font.wdth[0] > DEFAULT_RANGE[0] || font.wdth[1] < DEFAULT_RANGE[1]) && ` fitWidth searches 75–125 by default, but this font only has ${font.wdth[0]}–${font.wdth[1]}: the browser clamps anything outside it, so only ${gotMin}–${gotMax} has any effect, and there is no wider range to switch to.`}
 				{font.wdth && !fullRange && font.wdth[0] <= DEFAULT_RANGE[0] && font.wdth[1] >= DEFAULT_RANGE[1] && (font.wdth[0] < DEFAULT_RANGE[0] || font.wdth[1] > DEFAULT_RANGE[1]) && ' 75–125 is fitWidth’s default search range, not a property of the font (on Google Fonts it is the most common wdth range after Noto’s 62.5–100: 24 of 97 families). This font has more, and “Font’s full range” searches all of it.'}
 			</p>
 
@@ -665,10 +679,11 @@ export default function Demo() {
 				{reach && demoWidth > 0 ? (
 					<>
 						<p className="text-sm leading-relaxed" data-reach-summary>
-							“{shownText}” is <strong>{px(reach.natural)}</strong> wide as set ({font.label}, {fontSize} px). The box is <strong>{px(boxPx)}</strong>, which is <strong>{pct(boxPx, reach.natural)}</strong> of that.{' '}
+							“{shownText}” is <strong>{px(reach.natural)}</strong> wide as set ({font.name}, {fontSize} px). The box is <strong>{px(boxPx)}</strong>, which is <strong>{pct(boxPx, reach.natural)}</strong> of that.{' '}
 							{font.wdth
 								? <>On its own, wdth {gotMin}–{gotMax} can make it <strong>{pct(reach.axis[0], reach.natural)} to {pct(reach.axis[1], reach.natural)}</strong> of its set width ({px(reach.axis[0])} to {px(reach.axis[1])}).{' '}
-									{boxPx >= reach.axis[0] - 0.5 && boxPx <= reach.axis[1] + 0.5
+									{/* Same rule as a fit: the text may be up to half a pixel narrower than the box, never wider. */}
+									{boxPx >= reach.axis[0] - 0.005 && boxPx <= reach.axis[1] + 0.5
 										? 'The box is inside that range, so the axis can do this fit alone.'
 										: boxPx > reach.axis[1]
 											? 'The box is wider than that, so the axis runs out and something else has to do the rest.'
@@ -701,11 +716,11 @@ export default function Demo() {
 				)}
 			</div>
 
-			<MeasuredStrip current={font.label} />
+			<MeasuredStrip current={font.name} />
 
 			{/* The same headline, four ways */}
 			<div className="flex flex-col gap-10">
-				<h3 className="text-xs uppercase tracking-[0.18em] font-medium text-muted">One headline, one box, four ways to fit it</h3>
+				<h3 className="text-xs uppercase tracking-[0.18em] font-medium text-muted">One headline, one box, four strategies</h3>
 				{STRATEGIES.map(s => (
 					<StrategyRow
 						key={s.id}
@@ -722,8 +737,8 @@ export default function Demo() {
 			</div>
 
 			<p className="text-xs text-muted" style={{ lineHeight: "1.8" }}>
-				{font.id === 'roboto-flex' && 'Roboto Flex has an optical-size axis that follows font size, so a 2× font size is not 2× the width, and its wdth reach is smaller at small sizes: drag “Font size you set” and watch the ruler. '}
-				Each “×” is how much that step changed the headline’s width; multiply them and you get the fitted width over the width as set. In a fit, the last letter ends inside the box and at most half a pixel from its edge. When every range a strategy may use has run out, the row says how far short (or over) it ended: fitWidth stops there and does not force the fit. (An overflow also prints one console warning per page; falling short prints nothing.) No row always wins: the last one stops at half and double the size you set, so a very narrow box can still overflow it where ±{DEFAULT_TRACKING}em of tracking squeezes in. The numbers under each row come from the object <code className="font-mono">applyFitWidth</code> returns; this demo runs the code in the repository, which is ahead of npm 1.1.0.
+				{font.opsz && `${font.name} has an optical-size axis that follows font size, so a 2× font size is not 2× the width (the “×” beside a font size is the change in width, not in size), and its wdth reach changes with size: drag “Font size you set” and watch the ruler. `}
+				Each “×” is how much that step changed the headline’s width; multiply them and you get the fitted width over the width as set. Widths here are the text’s measured (advance) width, with letter-spacing counted between letters only. In a fit that width is inside the box and at most half a pixel from its edge; the ink of the last letter can sit a few pixels either side of that, as it does in any text (an overhanging “f”, or the side bearing of an “M”). When every range a strategy may use has run out, the row says how far short (or over) it ended: fitWidth stops there and does not force the fit. (An overflow also prints a console warning, once for each combination of levers; falling short prints nothing.) No row always wins: the last one stops at half and double the size you set, so a very narrow box can still overflow it where ±{DEFAULT_TRACKING}em of tracking squeezes in. The numbers under each row come from the object <code className="font-mono">applyFitWidth</code> returns; this demo runs the code in the repository, which is ahead of npm 1.1.0.
 			</p>
 		</div>
 	)
