@@ -68,6 +68,24 @@ export interface FitWidthOptions {
 	respectReducedMotion?: boolean
 
 	/**
+	 * Count letter-spacing between letters only, so a tracked fit ends with its last letter on the
+	 * target. Default: false.
+	 *
+	 * Browsers add letter-spacing after the last letter as well. By default that trailing space is
+	 * part of the fitted width, so with tracking of t the last letter ends t short of the target
+	 * (or t past it, when t is negative). With this option the fit ignores the trailing space and
+	 * cancels it with an inline `margin-right`.
+	 *
+	 * It is only applied where that is safe: the element must size itself to its text
+	 * (`display: inline-block` or another inline-level display, a float, or absolutely positioned)
+	 * and must end in text that takes the element's own letter-spacing. Otherwise the option is
+	 * ignored with a console warning and the fit is the default one. The trailing space still exists
+	 * inside the element's box, so give a scrolling container `overflow: hidden` or `clip`. It
+	 * assumes the last character takes spacing, which is not true of joined scripts such as Arabic.
+	 */
+	trimTrailingSpace?: boolean
+
+	/**
 	 * Called after every fit with what the fit did (the same object `applyFitWidth` returns).
 	 * Use it to log or display how much of the fit came from the axis, font size and tracking.
 	 */
@@ -84,11 +102,12 @@ export interface FitWidthResult {
 	/** The text's width as authored, before any fitting */
 	natural: number
 	/**
-	 * The text's width after the fit. Letter-spacing the fit added is counted between letters only:
-	 * the space browsers add after the last letter is left out (and cancelled with a right margin),
-	 * so this is where the last letter ends.
+	 * The text's width after the fit: the element's measured (advance) width. It includes the
+	 * letter-spacing browsers add after the last letter, unless `trimmed` is true.
 	 */
 	width: number
+	/** True when `trimTrailingSpace` was applied: `width` then counts spacing between letters only */
+	trimmed: boolean
 	/** width − target: 0 to −tolerance when the text fits; more negative when it falls short; positive when it overflows */
 	gap: number
 	/**
@@ -101,7 +120,11 @@ export interface FitWidthResult {
 	axis: string | null
 	/** The axis value written, or null when the axis wasn't used */
 	axisValue: number | null
-	/** The font size after the fit, in px (the element's own size when `size` is off) */
+	/**
+	 * The font size after the fit, in px (the element's own size when `size` is off). If a
+	 * stylesheet sets the font size with `!important`, the inline size can't take effect: the fit
+	 * warns, and this is the size it asked for, not the one rendered.
+	 */
 	fontSize: number
 	/** Letter-spacing added by the fit, in em (0 when none was added) */
 	tracking: number
@@ -114,9 +137,9 @@ export interface FitWidthResult {
 	 * Where each stage ended. `axis` is 'inert' when the axis doesn't change this text's width
 	 * (the font doesn't have it, or the characters come from a fallback font). `tracking` is 'stepped' when no letter-spacing value lands on the
 	 * target: any non-zero letter-spacing turns a font's ligatures off, which jumps the width, and a
-	 * target inside that jump can't be reached by tracking. `tracking` is 'inert' when letter-spacing
-	 * doesn't change this text's width at all (a single letter has no gaps to space). A stage that
-	 * wasn't used is null.
+	 * target more than a quarter-pixel inside that jump can't be reached by tracking. `tracking` is
+	 * 'inert' when letter-spacing doesn't change this text's width at all (with `trimTrailingSpace`,
+	 * a single letter has no gaps to space). A stage that wasn't used is null.
 	 */
 	limits: { axis: FitWidthLimit | 'inert'; size: FitWidthLimit; tracking: FitWidthLimit | 'stepped' | 'inert' }
 }

@@ -127,18 +127,29 @@ class CloneMeasureBackend implements MeasureBackend {
 	private scale: number
 	/** The clone's own inline font-size (the author's), restored when a trial has no fontSize. */
 	private inlineFontSize: string
+	/** When true, the trailing letter-spacing the fit adds is left out of the measured width. */
+	private trim: boolean
 
 	/**
 	 * @param el          - The element to fit
 	 * @param baseSpacing - The author's letter-spacing (CSS length) that tracking is added to
 	 */
-	constructor(el: HTMLElement, private baseSpacing: string) {
+	constructor(el: HTMLElement, private baseSpacing: string, trim = false) {
+		this.trim = trim
 		const clone = el.cloneNode(true) as HTMLElement
 		clone.removeAttribute('id')
 		clone.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'))
 		clone.setAttribute('aria-hidden', 'true')
 		clone.setAttribute('data-fitwidth-probe', '')
-		const ws = getComputedStyle(el).whiteSpace
+		const cs = getComputedStyle(el)
+		const ws = cs.whiteSpace
+		// The clone has no id and a different place among its siblings, so rules such as `#title`,
+		// `:first-child` or `:only-child` no longer reach it. Carry the element's computed text styles
+		// across inline, so it is measured in the same font, size and spacing.
+		for (const prop of CLONED_TEXT_STYLES) {
+			const value = cs.getPropertyValue(prop)
+			if (value) clone.style.setProperty(prop, value)
+		}
 		Object.assign(clone.style, {
 			position: 'absolute', visibility: 'hidden', pointerEvents: 'none', left: '0', top: '0',
 			display: 'inline-block', width: 'max-content', minWidth: '0', maxWidth: 'none', margin: '0',
@@ -154,22 +165,45 @@ class CloneMeasureBackend implements MeasureBackend {
 
 	/**
 	 * Width of the element (border box, layout px) with the trial style; `text` is the element's own.
-	 * Browsers add letter-spacing after the last letter too. That trailing space is not part of the
-	 * text, so the tracking the fit adds is taken off the width once: the fit then lands the last
-	 * letter on the target, not the empty space after it.
+	 * Browsers add letter-spacing after the last letter too. With `trim`, the tracking the fit adds
+	 * is taken off the width once, so the fit lands the last letter on the target.
 	 */
 	measureText(_text: string, style: TextStyle): Size {
 		this.clone.style.fontVariationSettings = style.fontVariationSettings ?? ''
 		this.clone.style.fontSize = style.fontSize ? `${style.fontSize}px` : this.inlineFontSize
 		this.clone.style.letterSpacing = style.letterSpacing ? `calc(${this.baseSpacing} + ${style.letterSpacing}px)` : this.baseSpacing
 		const rect = this.clone.getBoundingClientRect()
-		return { width: rect.width / this.scale - (style.letterSpacing ?? 0), height: rect.height / this.scale }
+		return { width: rect.width / this.scale - (this.trim ? style.letterSpacing ?? 0 : 0), height: rect.height / this.scale }
 	}
 
 	/** Removes the clone. */
 	dispose(): void {
 		this.clone.remove()
 	}
+}
+
+/** Computed text styles copied inline onto the measuring clone (see CloneMeasureBackend). */
+const CLONED_TEXT_STYLES = [
+	'font-family', 'font-size', 'font-weight', 'font-style', 'font-stretch', 'font-variation-settings',
+	'font-feature-settings', 'font-kerning', 'font-variant-ligatures', 'font-variant-caps', 'font-optical-sizing',
+	'font-size-adjust', 'word-spacing', 'text-transform', 'text-indent', 'line-height',
+]
+
+/**
+ * Whether the trailing-space correction can be applied to this element: it must size itself to its
+ * text (so a negative margin moves its edge and nothing wraps), and it must end in a text node that
+ * takes the element's own letter-spacing (so there is a trailing space to cancel).
+ */
+function canTrim(el: HTMLElement, cs: CSSStyleDeclaration): boolean {
+	const shrinkToFit = cs.display.startsWith('inline') || (cs.float !== 'none' && cs.float !== '') || cs.position === 'absolute' || cs.position === 'fixed'
+	if (!shrinkToFit) return false
+	let last: Node | null = el
+	while (last && last.nodeType === 1) {
+		const node = last as HTMLElement
+		if (node !== el && getComputedStyle(node).letterSpacing !== cs.letterSpacing) return false
+		last = node.lastChild
+	}
+	return !!last && last.nodeType === 3 && !!(last.textContent ?? '').trim()
 }
 
 /**
@@ -390,9 +424,8 @@ function searchSize(
  * axis, then (only with the `size` option) font size, then letter-spacing.
  *
  * Does NOT wrap content in spans or rewrite innerHTML — only sets
- * el.style.fontVariationSettings, el.style.letterSpacing (with a matching el.style.marginRight that
- * cancels the space browsers add after the last letter) and, with `size`, el.style.fontSize,
- * once, after the search.
+ * el.style.fontVariationSettings and el.style.letterSpacing, plus el.style.fontSize with `size` and
+ * el.style.marginRight with `trimTrailingSpace`, once, after the search.
  *
  * Calling applyFitWidth multiple times is idempotent: original styles are saved
  * on the first call and reset internally before each re-fit.
@@ -489,7 +522,9 @@ export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): F
 	// Tracking is added to the author's letter-spacing rather than replacing it. When font size can
 	// change, the author's spacing is carried in em so it scales with the fitted size.
 	const basePx = !cs.letterSpacing || cs.letterSpacing === 'normal' ? 0 : parseFloat(cs.letterSpacing) || 0
-	// The author's own right margin (px), which the trailing-space correction is added to.
+	// Trailing-space correction (opt-in), and the author's own right margin (px) it is added to.
+	const trim = !!options.trimTrailingSpace && canTrim(el, cs)
+	if (options.trimTrailingSpace && !trim) warnOnce('trim', '[fitWidth] trimTrailingSpace needs an element that sizes itself to its text (inline-block, a float or absolutely positioned) and ends in its own text; fitting without it')
 	const baseMargin = parseFloat(cs.marginRight) || 0
 	const sizing = !!sizeRange && fontSize > 0
 	const baseSpacing = basePx === 0
@@ -499,7 +534,7 @@ export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): F
 
 	// Measure candidates on a hidden clone of this element, so the visible element is written
 	// only once (no search-time flicker/thrash).
-	const backend = new CloneMeasureBackend(el, baseSpacing)
+	const backend = new CloneMeasureBackend(el, baseSpacing, trim)
 	const inRange = (gap: number) => gap <= 0 && gap >= -tolerance
 	let finalGap = 0
 	let natural = 0
@@ -536,36 +571,40 @@ export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): F
 		afterSize = finalGap + targetWidth
 		const sized = sizePx !== fontSize ? sizePx : undefined
 
-		// Stage 3 — letter-spacing closes what is left (skipped for prefer: 'axis')
+		// Stage 3 — letter-spacing closes what is left (skipped for prefer: 'axis', or a zero cap)
 		// (prefer: 'tracking' without `size` always searches, as it did before the size stage existed.)
-		if (prefer !== 'axis' && (!inRange(finalGap) || (prefer === 'tracking' && !sizing))) {
+		if (prefer !== 'axis' && maxTracking > 0 && (!inRange(finalGap) || (prefer === 'tracking' && !sizing))) {
 			const t = searchTracking(backend, text, fvs, sizePx, maxTracking, tolerance, targetWidth, 20, sized)
 			tracking = t.value
 			finalGap = t.gap
 			if (inRange(t.gap)) limits.tracking = null
 			else {
-				// Off target. Letter-spacing may do nothing to this text (a single letter has no gaps to
-				// space); it may have hit its cap; or the width may jump past the target between two
-				// neighbouring values (any letter-spacing turns a font's ligatures off).
+				// Off target. Letter-spacing may do nothing to this text (with trimming, a single letter
+				// has no gaps to space); it may have hit its cap; or the width may jump past the target
+				// between two neighbouring values (any letter-spacing turns a font's ligatures off).
+				// (Inertness is checked on the positive side only: a box can't go below zero width, so
+				// heavy negative spacing on one narrow letter would look like a change.)
 				const at = (em: number) => backend.measureText(text, { fontVariationSettings: fvs, letterSpacing: em * sizePx, fontSize: sized }).width
-				// (Compared on the positive side only: a box can't go below zero width, so heavy negative
-				// spacing on one narrow letter would look like a change.)
-				if (maxTracking > 0 && Math.abs(at(maxTracking) - at(0)) < 0.05) {
+				if (Math.abs(at(maxTracking) - at(0)) < 0.05) {
 					limits.tracking = 'inert'
 					tracking = 0
 					finalGap = at(0) - targetWidth
-				} else if (Math.abs(t.value) >= maxTracking * 0.999) limits.tracking = t.value < 0 ? 'min' : 'max'
-				else limits.tracking = 'stepped'
+				} else if (Math.abs(t.value) >= maxTracking * 0.95) limits.tracking = t.value < 0 ? 'min' : 'max'
+				else if (t.gap > 0.25 || t.gap < -tolerance - 0.25) limits.tracking = 'stepped'
 			}
 			el.style.letterSpacing = spacing(tracking)
-			// Cancel the space the browser adds after the last letter, so the element's box ends where
-			// its last letter does (and negative tracking doesn't leave the last letter outside the box).
-			if (tracking !== 0) el.style.marginRight = baseMargin === 0 ? `${-tracking}em` : `calc(${baseMargin}px + ${-tracking}em)`
+			// With trimming, cancel the space the browser adds after the last letter, so the element's
+			// box ends where its last letter does.
+			if (trim && tracking !== 0) el.style.marginRight = baseMargin === 0 ? `${-tracking}em` : `calc(${baseMargin}px + ${-tracking}em)`
 		} else if (sized !== undefined && baseSpacing !== '0px') {
 			// The clone was measured with the author's spacing in em: write the same on the element.
 			el.style.letterSpacing = baseSpacing
 		}
-		if (sized !== undefined) el.style.fontSize = `${+sized.toFixed(2)}px`
+		if (sized !== undefined) {
+			el.style.fontSize = `${+sized.toFixed(2)}px`
+			// A stylesheet !important beats an inline size: say so, since the result can't be trusted then.
+			if (Math.abs(parseFloat(getComputedStyle(el).fontSize) - sized) > 0.02) warnOnce('important-size', '[fitWidth] size was ignored: this element\'s font-size is set with !important, so the inline size has no effect')
+		}
 	} finally {
 		backend.dispose()
 	}
@@ -596,6 +635,7 @@ export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): F
 		axisValue,
 		fontSize: sizePx,
 		tracking,
+		trimmed: trim,
 		ratios: { axis: ratio(afterAxis, natural), size: ratio(afterSize, afterAxis), tracking: ratio(width, afterSize) },
 		limits,
 	}

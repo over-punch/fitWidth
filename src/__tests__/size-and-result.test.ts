@@ -101,14 +101,15 @@ describe('the result object', () => {
 		restore = mockLayout(900)
 		const { el } = make()
 		const r = applyFitWidth(el) as FitWidthResult
-		// wdth 125 → 500px; +0.3em in the 2 gaps between 3 letters at 100px → 560px. Still 340px short of 900.
+		// wdth 125 → 500px; +0.3em after each of 3 letters at 100px → 590px. Still 310px short of 900.
 		expect(r.status).toBe('short')
 		expect(r.axisValue).toBe(125)
 		expect(r.limits.axis).toBe('max')
 		expect(r.limits.tracking).toBe('max')
 		expect(r.tracking).toBeCloseTo(0.3, 3)
-		expect(r.width).toBeCloseTo(560, 0)
-		expect(r.gap).toBeCloseTo(-340, 0)
+		expect(r.width).toBeCloseTo(590, 0)
+		expect(r.gap).toBeCloseTo(-310, 0)
+		expect(r.trimmed).toBe(false)
 		expect(el.style.fontSize).toBe('100px')
 	})
 
@@ -124,8 +125,8 @@ describe('the result object', () => {
 	})
 
 	it('calls a sliver over the target an overflow, never a fit', () => {
-		// −0.3em in 2 gaps at 100px takes 300px (wdth 75) to 240px: 0.2px wider than a 239.8px box.
-		restore = mockLayout(239.8)
+		// −0.3em × 3 × 100px takes 300px (wdth 75) to 210px: 0.2px wider than a 209.8px box.
+		restore = mockLayout(209.8)
 		const { el } = make()
 		const r = applyFitWidth(el) as FitWidthResult
 		expect(r.gap).toBeGreaterThan(0)
@@ -259,27 +260,26 @@ describe('size: font size takes over when the axis runs out', () => {
 		restore = mockLayout(2000)
 		const { el } = make()
 		const r = applyFitWidth(el, { size: true }) as FitWidthResult
-		// wdth 125 × 2× size → 1000px; +0.05em in 2 gaps at 200px → 1020px.
+		// wdth 125 × 2× size → 1000px; +0.05em × 3 × 200px → 1030px.
 		expect(r.fontSize).toBe(200)
 		expect(r.limits.size).toBe('max')
 		expect(r.tracking).toBeCloseTo(0.05, 3)
 		expect(r.limits.tracking).toBe('max')
 		expect(r.status).toBe('short')
-		expect(r.width).toBeCloseTo(1020, 0)
-		// The element's box still holds the space after the last letter; the margin cancels it.
-		expect(textWidth(el) - spacingOf(el)).toBeCloseTo(r.width, 2)
+		expect(r.width).toBeCloseTo(1030, 0)
+		expect(textWidth(el)).toBeCloseTo(r.width, 2)
 	})
 
 	it('honours an explicit maxTracking and custom multipliers', () => {
-		restore = mockLayout(660)
+		restore = mockLayout(700)
 		const { el } = make()
 		const r = applyFitWidth(el, { size: { min: 0.8, max: 1.2 }, maxTracking: 0.3 }) as FitWidthResult
-		// wdth 125 × 1.2 → 600px; +0.3em in 2 gaps at 120px reaches 672px, so tracking closes 660 at 0.25em.
+		// wdth 125 × 1.2 → 600px; +0.3em × 3 × 120 → up to 708px, so tracking closes it.
 		expect(r.fontSize).toBe(120)
 		expect(r.limits.size).toBe('max')
 		expect(r.status).toBe('fit')
-		expect(r.tracking).toBeGreaterThan(0.245)
-		expect(r.tracking).toBeLessThanOrEqual(0.25)
+		expect(r.tracking).toBeGreaterThan(0.27)
+		expect(r.tracking).toBeLessThan(0.28)
 	})
 
 	it('uses font size, then tracking, and never the axis for prefer: tracking', () => {
@@ -365,13 +365,34 @@ describe('size: font size takes over when the axis runs out', () => {
 	})
 })
 
-describe('tracking lands the last letter on the target', () => {
+/** An inline-block 100px heading: it sizes itself to its text, so trimTrailingSpace can apply. */
+function makeInline(extra = '') {
+	return make(`font-size: 100px; display: inline-block;${extra ? ' ' + extra : ''}`)
+}
+
+describe('the default counts the space after the last letter, as 1.1.0 did', () => {
+	it('fits the box, writes no margin, and reports trimmed: false', () => {
+		// wdth 125 → 500px; a 560px box needs 60px over 3 letters (trailing space included): 0.2em.
+		restore = mockLayout(560)
+		const { el } = makeInline()
+		const r = applyFitWidth(el) as FitWidthResult
+		expect(r.status).toBe('fit')
+		expect(r.trimmed).toBe(false)
+		expect(r.tracking).toBeGreaterThan(0.197)
+		expect(r.tracking).toBeLessThanOrEqual(0.2)
+		expect(textWidth(el)).toBeLessThanOrEqual(560)
+		expect(el.style.marginRight).toBe('')
+	})
+})
+
+describe('trimTrailingSpace lands the last letter on the target', () => {
 	it('does not count the space after the last letter, and cancels it with a right margin', () => {
 		// wdth 125 → 500px; a 540px box needs 40px in the 2 gaps: 0.2em. The box then holds 60px of spacing.
 		restore = mockLayout(540)
-		const { el } = make()
-		const r = applyFitWidth(el) as FitWidthResult
+		const { el } = makeInline()
+		const r = applyFitWidth(el, { trimTrailingSpace: true }) as FitWidthResult
 		expect(r.status).toBe('fit')
+		expect(r.trimmed).toBe(true)
 		expect(r.tracking).toBeGreaterThan(0.197)
 		expect(r.tracking).toBeLessThanOrEqual(0.2)
 		const lastLetterEnd = textWidth(el) - spacingOf(el)
@@ -384,8 +405,8 @@ describe('tracking lands the last letter on the target', () => {
 	it('keeps the last letter inside the box with negative tracking', () => {
 		// wdth 75 → 300px; a 260px box needs −40px in 2 gaps: −0.2em.
 		restore = mockLayout(260)
-		const { el } = make()
-		const r = applyFitWidth(el) as FitWidthResult
+		const { el } = makeInline()
+		const r = applyFitWidth(el, { trimTrailingSpace: true }) as FitWidthResult
 		expect(r.status).toBe('fit')
 		expect(r.tracking).toBeLessThan(-0.2)
 		expect(textWidth(el) - spacingOf(el)).toBeLessThanOrEqual(260)
@@ -395,11 +416,11 @@ describe('tracking lands the last letter on the target', () => {
 
 	it('adds the correction to the author’s own right margin, and restores it', () => {
 		restore = mockLayout(540)
-		const { el } = make('font-size: 100px; margin-right: 12px')
-		const r = applyFitWidth(el) as FitWidthResult
+		const { el } = makeInline('margin-right: 12px')
+		const r = applyFitWidth(el, { trimTrailingSpace: true }) as FitWidthResult
 		expect(el.style.marginRight).toMatch(/^calc\(12px \+ -0\.19\d+em\)$/)
 		const first = el.style.marginRight
-		applyFitWidth(el) // idempotent: starts again from the author's 12px
+		applyFitWidth(el, { trimTrailingSpace: true }) // idempotent: starts again from the author's 12px
 		expect(el.style.marginRight).toBe(first)
 		expect(r.tracking).toBeGreaterThan(0.19)
 		removeFitWidth(el)
@@ -408,15 +429,63 @@ describe('tracking lands the last letter on the target', () => {
 
 	it('writes no margin when no tracking is added', () => {
 		restore = mockLayout(450)
-		const { el } = make()
-		applyFitWidth(el)
-		expect(el.style.marginRight).toBe('')
-		restore()
-		restore = mockLayout(900)
-		applyFitWidth(el, { size: true })
+		const { el } = makeInline()
+		applyFitWidth(el, { trimTrailingSpace: true })
 		expect(el.style.marginRight).toBe('')
 	})
 
+	it('is ignored, with a warning, on a block element that fills its parent', () => {
+		// A block heading can't follow a negative margin: trimming would wrap it or push it out of its box.
+		restore = mockLayout(560)
+		const { el } = make('font-size: 100px; display: block')
+		const r = applyFitWidth(el, { trimTrailingSpace: true }) as FitWidthResult
+		expect(r.trimmed).toBe(false)
+		expect(el.style.marginRight).toBe('')
+		expect(textWidth(el)).toBeLessThanOrEqual(560)
+		expect(console.warn).toHaveBeenCalled()
+	})
+
+	it('is ignored when the element ends in something other than its own text', () => {
+		restore = mockLayout(560)
+		for (const html of ['Fit<img alt="">', 'F<span style="letter-spacing: 0px">it</span>']) {
+			document.body.innerHTML = ''
+			const { el } = makeInline()
+			el.innerHTML = html
+			const r = applyFitWidth(el, { trimTrailingSpace: true }) as FitWidthResult
+			expect(r.trimmed).toBe(false)
+			expect(el.style.marginRight).toBe('')
+		}
+	})
+
+	it('reports tracking on one letter as inert, adds none, and does not blame a ligature', () => {
+		// One letter has no gaps: with the trailing space trimmed, letter-spacing can't change its width.
+		LETTERS = 1
+		restore = mockLayout(900)
+		const { el } = makeInline()
+		const r = applyFitWidth(el, { trimTrailingSpace: true }) as FitWidthResult
+		expect(r.status).toBe('short')
+		expect(r.limits.tracking).toBe('inert')
+		expect(r.tracking).toBe(0)
+		expect(r.ratios.tracking).toBe(1)
+		expect(el.style.marginRight).toBe('')
+		expect(r.width).toBe(500)
+	})
+
+	it('still reports one narrow letter as inert when negative spacing would clamp its box at zero', () => {
+		// "I": 25px wide at wdth 125. −0.3em is −30px, which clamps the box to 0 and looks like a change.
+		LETTERS = 1
+		narrow = 0.05
+		restore = mockLayout(900)
+		const { el } = makeInline()
+		for (const prefer of ['auto', 'tracking'] as const) {
+			const r = applyFitWidth(el, { prefer, trimTrailingSpace: true }) as FitWidthResult
+			expect(r.limits.tracking).toBe('inert')
+			expect(r.tracking).toBe(0)
+		}
+	})
+})
+
+describe('labels and warnings', () => {
 	it('names only the levers it was allowed to use in the overflow warning', () => {
 		restore = mockLayout(150)
 		const { el } = make()
@@ -425,35 +494,49 @@ describe('tracking lands the last letter on the target', () => {
 		expect(msg).toContain('axisMin/axisMax')
 		expect(msg).not.toContain('maxTracking')
 	})
-})
 
-describe('a one-letter headline', () => {
-	it('reports tracking as inert, adds none, and does not blame a ligature', () => {
-		// One letter has no gaps: the mocked width ignores letter-spacing once the trailing space is taken off.
-		LETTERS = 1
+	it('skips the tracking stage when maxTracking is 0', () => {
 		restore = mockLayout(900)
 		const { el } = make()
-		const r = applyFitWidth(el) as FitWidthResult
-		expect(r.status).toBe('short')
-		expect(r.limits.tracking).toBe('inert')
+		const r = applyFitWidth(el, { maxTracking: 0 }) as FitWidthResult
+		expect(el.style.letterSpacing).toBe('')
 		expect(r.tracking).toBe(0)
-		expect(r.ratios.tracking).toBe(1)
-		expect(el.style.marginRight).toBe('')
-		expect(r.width).toBe(500)
+		expect(r.limits.tracking).toBeNull()
+		expect(r.status).toBe('short')
+	})
+
+	it('calls a near-cap value the cap, and a sub-pixel miss nothing at all', () => {
+		// A 5px target: tracking bottoms out at its cap.
+		restore = mockLayout(5)
+		const { el } = make()
+		expect((applyFitWidth(el) as FitWidthResult).limits.tracking).toBe('min')
+		// tolerance 0 can't be hit exactly by a search; a miss of a hair is not a ligature jump.
+		restore()
+		restore = mockLayout(540)
+		const r = applyFitWidth(el, { tolerance: 0 }) as FitWidthResult
+		expect(Math.abs(r.gap)).toBeLessThan(0.25)
+		expect(r.limits.tracking).toBeNull()
 	})
 })
 
-describe('a narrow one-letter headline', () => {
-	it('is still reported as inert when negative spacing would clamp its box at zero', () => {
-		// "I": 25px wide at wdth 125. −0.3em is −30px, which clamps the box to 0 and looks like a change.
-		LETTERS = 1
-		narrow = 0.05
-		restore = mockLayout(900)
-		const { el } = make()
-		for (const prefer of ['auto', 'tracking'] as const) {
-			const r = applyFitWidth(el, { prefer }) as FitWidthResult
-			expect(r.limits.tracking).toBe('inert')
-			expect(r.tracking).toBe(0)
+describe('the measuring copy keeps styles that reach the element by id or position', () => {
+	it('copies the computed font size onto the clone, so the natural width is the element’s', () => {
+		// The heading gets its size from an inline style here; the clone must carry the same size even
+		// though it has no id. (In a browser the size would come from a #title rule the clone can't match.)
+		restore = mockLayout(450)
+		const { el } = make('font-size: 100px')
+		el.id = 'title'
+		const seen: string[] = []
+		const orig = Element.prototype.getBoundingClientRect
+		Element.prototype.getBoundingClientRect = function (this: Element) {
+			const node = this as HTMLElement
+			if (node.hasAttribute('data-fitwidth-probe')) seen.push(node.style.fontSize + '|' + (node.id || 'no-id'))
+			return orig.call(this)
 		}
+		const r = applyFitWidth(el) as FitWidthResult
+		Element.prototype.getBoundingClientRect = orig
+		expect(seen.length).toBeGreaterThan(0)
+		expect(seen.every((v) => v === '100px|no-id')).toBe(true)
+		expect(r.natural).toBe(400)
 	})
 })

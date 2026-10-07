@@ -43,12 +43,13 @@ export const FitWidthText = forwardRef<HTMLElement, FitWidthTextProps>(
 			tolerance,
 			respectReducedMotion,
 			size,
+			trimTrailingSpace,
 			onFit,
 			...htmlProps
 		},
 		ref,
 	) {
-		const fitOptions: FitWidthOptions = { target, prefer, axis, axisMin, axisMax, maxTracking, tolerance, respectReducedMotion, size, onFit }
+		const fitOptions: FitWidthOptions = { target, prefer, axis, axisMin, axisMax, maxTracking, tolerance, respectReducedMotion, size, trimTrailingSpace, onFit }
 		// A new style prop makes React rewrite the inline style, which drops the fit: refit after it.
 		const innerRef = useFitWidth(fitOptions, style ? JSON.stringify(style) : '')
 
