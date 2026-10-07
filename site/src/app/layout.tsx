@@ -6,22 +6,22 @@ import SiteHeader from "../components/SiteHeader"
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })
 
 export const metadata: Metadata = {
-	title: "Fit Width — Fill any width, exactly",
+	title: "Fit Width: fit a headline to its box with the width axis",
 	icons: { icon: "/icon.svg", shortcut: "/icon.svg", apple: "/icon.svg" },
-	description: "Binary-search the wdth axis and letter-spacing to make any headline fill its container exactly. Variable-font safe, resize-aware, precise to half a pixel. React + vanilla JS.",
+	description: "Fit a one-line headline to a target width with a variable font’s wdth axis, then letter-spacing or font size when the axis runs out. It reports what each step did. React + vanilla JS.",
 	keywords: ["fit width", "variable font", "wdth", "letter-spacing", "display type", "headline", "typography", "TypeScript", "npm", "react"],
 	openGraph: {
-		title: "Fit Width — Fill any width, exactly",
-		description: "Binary-search the wdth axis and letter-spacing to make any headline flush with its container. A precision typesetting tool, now in one npm package.",
+		title: "Fit Width: fit a headline to its box",
+		description: "Fit a one-line headline to a target width with the wdth axis, then letter-spacing or font size when the axis runs out. It reports what each step did.",
 		url: "https://fitwidth.com",
 		siteName: "Fit Width",
 		type: "website",
-		images: [{ url: "https://fitwidth.com/opengraph-image.png", width: 1200, height: 630, alt: "Fit Width — flush every time." }],
+		images: [{ url: "https://fitwidth.com/opengraph-image.png", width: 1200, height: 630, alt: "Fit Width: fit a headline to its box." }],
 	},
 	twitter: {
 		card: "summary_large_image",
-		title: "Fit Width — Fill any width, exactly",
-		description: "Binary-search the wdth axis and letter-spacing to make any headline flush with its container. A precision typesetting tool, now in one npm package.",
+		title: "Fit Width: fit a headline to its box",
+		description: "Fit a one-line headline to a target width with the wdth axis, then letter-spacing or font size when the axis runs out. It reports what each step did.",
 		images: ["https://fitwidth.com/opengraph-image.png"],
 	},
 	metadataBase: new URL("https://fitwidth.com"),

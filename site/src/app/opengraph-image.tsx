@@ -4,7 +4,7 @@ import { ImageResponse } from 'next/og'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-export const alt = 'Fit Width — flush every time.'
+export const alt = 'Fit Width: fit a headline to its box.'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
@@ -23,8 +23,8 @@ export default async function Image() {
 							<div key={i} style={{ width: '100%', height: 4, background: i === 1 ? '#b6bece' : '#757a84', borderRadius: 2 }} />
 						))}
 					</div>
-					<div style={{ fontSize: 76, color: '#f2f5fb', lineHeight: 1.06, fontWeight: 300 }}>Fit Width,</div>
-					<div style={{ fontSize: 76, color: '#9298a5', lineHeight: 1.06, fontWeight: 300 }}>flush every time.</div>
+					<div style={{ fontSize: 76, color: '#f2f5fb', lineHeight: 1.06, fontWeight: 300 }}>Fit a headline</div>
+					<div style={{ fontSize: 76, color: '#9298a5', lineHeight: 1.06, fontWeight: 300 }}>to its box.</div>
 				</div>
 
 				{/* Footer */}

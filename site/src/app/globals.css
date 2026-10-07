@@ -19,3 +19,20 @@
 	font-style: normal;
 	font-display: swap;
 }
+
+/* Demo fonts: Latin subsets of the Google Fonts variable files (OFL), used to show different wdth ranges. */
+@font-face {
+	font-family: 'FW Roboto';
+	src: url('/fonts/Roboto.woff2') format('woff2');
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'FW Anybody';
+	src: url('/fonts/Anybody.woff2') format('woff2');
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}

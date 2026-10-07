@@ -1,15 +1,85 @@
 "use client"
 
-// Interactive demo: drag a width slider (or move cursor/tilt/angular) to see headlines fill their container exactly
-import { useState, useEffect, useCallback, useLayoutEffect, useRef, useMemo } from "react"
+// Interactive demo: one headline in one box, fitted four ways, with a ruler of how far each lever
+// reaches and a per-row breakdown (wdth, font size, tracking) taken from applyFitWidth's result.
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useMediaQuery, useClientValue } from "@/lib/clientValue"
 import { applyFitWidth } from "@overpunch/fitwidth"
-import type { FitWidthOptions } from "@overpunch/fitwidth"
+import type { FitWidthOptions, FitWidthResult } from "@overpunch/fitwidth"
 
-type PreferMode = NonNullable<FitWidthOptions['prefer']>
+/** A demo font: its CSS family and the wdth range the font file really has (null: no wdth axis). */
+interface DemoFont {
+	/** Stable id for React keys and the select */
+	id: string
+	/** Name shown in the picker */
+	label: string
+	/** CSS font-family value */
+	family: string
+	/** The font's own wdth axis range from its fvar table, or null when it has no wdth axis */
+	wdth: [number, number] | null
+	/** One line on what this font is here to show */
+	note: string
+}
 
-/** Labels for the three demo headlines */
-const HEADLINES = ["Typography", "Display Type", "Headline"]
+/** The demo fonts. wdth ranges were read from each file's fvar table (fontTools, 2026-10-07). */
+const FONTS: DemoFont[] = [
+	{ id: 'roboto-flex', label: 'Roboto Flex', family: "'Roboto Flex', sans-serif", wdth: [25, 151], note: 'A wide axis (25–151) that also has an optical-size axis, so its reach changes with font size.' },
+	{ id: 'roboto', label: 'Roboto', family: "'FW Roboto', sans-serif", wdth: [75, 100], note: 'Narrows only (75–100): it has no width above normal.' },
+	{ id: 'merriweather', label: 'Merriweather', family: "'Merriweather', serif", wdth: [87, 112], note: 'A small range (87–112).' },
+	{ id: 'anybody', label: 'Anybody', family: "'FW Anybody', sans-serif", wdth: [50, 150], note: 'Drawn across a wide range (50–150). Try “Font’s full range” below.' },
+	{ id: 'inter', label: 'Inter (no wdth axis)', family: 'var(--font-sans), sans-serif', wdth: null, note: 'No wdth axis: the axis stage does nothing.' },
+]
+
+/** fitWidth's default wdth search range. */
+const DEFAULT_RANGE: [number, number] = [75, 125]
+
+/** fitWidth's default letter-spacing cap in em (without `size`). */
+const DEFAULT_TRACKING = 0.3
+
+/** fitWidth's letter-spacing cap in em when `size` is on. */
+const SIZED_TRACKING = 0.05
+
+/** fitWidth's font-size multipliers for `size: true`. */
+const SIZE_RANGE: [number, number] = [0.5, 2]
+
+/** Headline presets offered beside the text field. */
+const PRESETS = ['Typography', 'Display Type', 'Headline', 'MINIMUM']
+
+/** One of the four strategies shown side by side. */
+interface Strategy {
+	/** Stable id */
+	id: string
+	/** Short name */
+	label: string
+	/** The option that selects it, shown as code */
+	code: string
+	/** What it is allowed to change */
+	allows: string
+	/** Options passed to applyFitWidth (the axis range is added per font) */
+	options: FitWidthOptions
+	/** True for the strategy that needs the unreleased `size` option */
+	next?: boolean
+}
+
+/** The four strategies, in the order they are shown. */
+const STRATEGIES: Strategy[] = [
+	{ id: 'axis', label: 'Width axis only', code: "prefer: 'axis'", allows: 'May change: wdth.', options: { prefer: 'axis' } },
+	{ id: 'tracking', label: 'Tracking only', code: "prefer: 'tracking'", allows: `May change: letter-spacing, up to ±${DEFAULT_TRACKING}em.`, options: { prefer: 'tracking' } },
+	{ id: 'auto', label: 'Width axis, then tracking', code: "prefer: 'auto' (the default)", allows: `May change: wdth first, then letter-spacing up to ±${DEFAULT_TRACKING}em.`, options: { prefer: 'auto' } },
+	{ id: 'size', label: 'Width axis, then font size, then a little tracking', code: 'size: true', allows: `May change: wdth first, then font size from ${SIZE_RANGE[0]}× to ${SIZE_RANGE[1]}×, then letter-spacing up to ±${SIZED_TRACKING}em.`, options: { prefer: 'auto', size: true }, next: true },
+]
+
+/** Widths (px) the levers can reach for the current headline, measured in this browser. */
+interface Reach {
+	/** Width as set: wdth at the font's normal, the chosen font size, no added spacing */
+	natural: number
+	/** Narrowest and widest the wdth search range gives on its own */
+	axis: [number, number]
+	/** The same with ±0.3em of tracking added at each end */
+	tracking: [number, number]
+	/** The same with font size 0.5×–2× and ±0.05em tracking at each end */
+	size: [number, number]
+}
 
 /** Cursor icon SVG */
 function CursorIcon() {
@@ -32,70 +102,142 @@ function GyroIcon() {
 	)
 }
 
-/**
- * Single headline row — applies applyFitWidth directly (not via FitWidthText) to avoid
- * React style-prop reset of fontVariationSettings on re-renders. ResizeObserver watches
- * the container div (not the inline-block element) so it fires on parent-width changes.
- */
-function HeadlineRow({ text, containerPct, prefer, showInternals }: { text: string; containerPct: number; prefer: PreferMode; showInternals: boolean }) {
-	const containerRef = useRef<HTMLDivElement>(null)
-	const elRef = useRef<HTMLParagraphElement>(null)
-	// Ref-based readout avoids state re-renders that would reset FVS via React style prop
-	const readoutRef = useRef<HTMLSpanElement>(null)
+/** Formats a width multiplier, e.g. 1.2 → "×1.20". */
+function times(r: number): string {
+	return `×${r.toFixed(2)}`
+}
 
-	const apply = useCallback(() => {
+/** Formats a width in px to one decimal. */
+function px(n: number): string {
+	return `${n.toFixed(1)} px`
+}
+
+/** Formats a width as a percentage of the natural width. */
+function pct(n: number, natural: number): string {
+	return natural > 0 ? `${Math.round((n / natural) * 100)}%` : '—'
+}
+
+/**
+ * The wdth range the demo asks fitWidth to search: the library default (75–125) or the font's whole
+ * range, never wider than the font really has, so the value shown is one the font can render.
+ */
+function searchRange(font: DemoFont, fullRange: boolean): [number, number] {
+	if (!font.wdth) return DEFAULT_RANGE
+	if (fullRange) return font.wdth
+	return [Math.max(DEFAULT_RANGE[0], font.wdth[0]), Math.min(DEFAULT_RANGE[1], font.wdth[1])]
+}
+
+/**
+ * Measures how far each lever reaches for this text, with a hidden probe laid out like the rows.
+ * These are plain browser measurements (getBoundingClientRect), independent of the library.
+ */
+function measureReach(probe: HTMLElement, range: [number, number], hasAxis: boolean, fontSize: number): Reach {
+	const width = (wdth: number | null, size: number, spacingEm: number) => {
+		probe.style.fontVariationSettings = wdth === null ? '' : `"wdth" ${wdth}`
+		probe.style.fontSize = `${size}px`
+		probe.style.letterSpacing = spacingEm ? `${spacingEm}em` : ''
+		return probe.getBoundingClientRect().width
+	}
+	const lo = hasAxis ? range[0] : null
+	const hi = hasAxis ? range[1] : null
+	return {
+		natural: width(null, fontSize, 0),
+		axis: [width(lo, fontSize, 0), width(hi, fontSize, 0)],
+		tracking: [width(lo, fontSize, -DEFAULT_TRACKING), width(hi, fontSize, DEFAULT_TRACKING)],
+		size: [width(lo, fontSize * SIZE_RANGE[0], -SIZED_TRACKING), width(hi, fontSize * SIZE_RANGE[1], SIZED_TRACKING)],
+	}
+}
+
+/** One labelled figure in a row's breakdown. */
+function Figure({ name, value, factor, note }: { name: string; value: string; factor?: string; note?: string }) {
+	return (
+		<div className="flex flex-col gap-0.5 min-w-[7.5rem]">
+			<dt className="text-[0.65rem] uppercase tracking-[0.18em] text-muted">{name}</dt>
+			<dd className="font-mono tabular-nums text-xs">
+				{value}{factor && <span className="text-muted"> {factor}</span>}
+			</dd>
+			{note && <dd className="text-[0.7rem] text-muted">{note}</dd>}
+		</div>
+	)
+}
+
+/** Plain-words verdict for a fit result. */
+function verdict(r: FitWidthResult): string {
+	if (r.status === 'fit') return `Fits: ${px(r.width)} in a ${px(r.target)} box.`
+	// No letter-spacing value lands on the target: any spacing splits this font's ligatures, which jumps the width.
+	const why = r.limits.tracking === 'stepped'
+		? 'Tracking can’t land on this width: any letter-spacing turns off the font’s ligatures, and the width jumps past the box.'
+		: 'Every range it may use has run out.'
+	if (r.status === 'short') return `Falls ${px(-r.gap)} short: ${px(r.width)} in a ${px(r.target)} box. ${why}`
+	return `Overflows by ${px(r.gap)}: ${px(r.width)} in a ${px(r.target)} box. ${why}`
+}
+
+/**
+ * One strategy: the headline in its box, fitted with that strategy's options, and what the fit did.
+ * The fit runs in a frame callback and stores applyFitWidth's result for the readout.
+ */
+function StrategyRow({ strategy, text, font, rangeMin, rangeMax, fontSize, boxPct, layoutKey }: {
+	strategy: Strategy
+	text: string
+	font: DemoFont
+	rangeMin: number
+	rangeMax: number
+	fontSize: number
+	boxPct: number
+	layoutKey: string
+}) {
+	const elRef = useRef<HTMLParagraphElement>(null)
+	const [result, setResult] = useState<FitWidthResult | null>(null)
+
+	useEffect(() => {
 		const el = elRef.current
 		if (!el) return
-		applyFitWidth(el, { target: 'container', prefer, axisMin: 25, axisMax: 151 })
-		if (readoutRef.current) {
-			const fvs = el.style.fontVariationSettings || '—'
-			const ls = el.style.letterSpacing || '0em'
-			readoutRef.current.textContent = `fvs: ${fvs}  ls: ${ls}`
-		}
-	}, [prefer])
+		const id = requestAnimationFrame(() => {
+			// applyFitWidth resets to the element's own styles before every fit, so a changed font,
+			// size, text or box is measured from scratch.
+			setResult(applyFitWidth(el, { ...strategy.options, target: 'container', axisMin: rangeMin, axisMax: rangeMax }))
+		})
+		return () => cancelAnimationFrame(id)
+	}, [strategy, text, font, rangeMin, rangeMax, fontSize, boxPct, layoutKey])
 
-	// Re-run on prefer change; observe the container for resize (not the element itself,
-	// since inline-block element width doesn't change when the container resizes)
-	useLayoutEffect(() => {
-		apply()
-		const container = containerRef.current
-		if (!container || typeof ResizeObserver === 'undefined') return
-		const ro = new ResizeObserver(apply)
-		ro.observe(container)
-		return () => ro.disconnect()
-	}, [apply])
-
-	// Re-run after fonts load once on mount — ResizeObserver handles subsequent re-fits.
-	// Deps are intentionally [] to avoid re-subscribing every time apply reference changes;
-	// document.fonts.ready stays resolved so re-subscribing with [apply] causes double-applies.
-	useEffect(() => {
-		document.fonts.ready.then(apply)
-	// eslint-disable-next-line react-hooks/exhaustive-deps -- see comment above: re-subscribing on `apply` double-applies
-	}, [])
+	const r = result
+	const usesAxis = strategy.options.prefer !== 'tracking'
+	const usesTracking = strategy.options.prefer !== 'axis'
+	const usesSize = !!strategy.options.size
+	const axisNote = !r ? undefined
+		: r.limits.axis === 'inert' ? 'this font has no wdth axis'
+		: r.limits.axis === 'max' ? 'widest value searched'
+		: r.limits.axis === 'min' ? 'narrowest value searched'
+		: undefined
+	const sizeNote = !r ? undefined : r.limits.size === 'max' ? `the ${SIZE_RANGE[1]}× limit` : r.limits.size === 'min' ? `the ${SIZE_RANGE[0]}× limit` : undefined
+	const trackingNote = !r ? undefined : r.limits.tracking === 'stepped' ? 'no value lands on the box' : r.limits.tracking ? 'at its cap' : undefined
 
 	return (
-		<div className="flex flex-col gap-2">
-			{/* Container with visible border — the headline should be flush to both edges */}
+		<div className="flex flex-col gap-2" data-strategy={strategy.id} data-status={r?.status ?? 'pending'}>
+			<div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+				<h3 className="text-sm font-semibold">{strategy.label}</h3>
+				<code className="text-xs font-mono text-muted">{strategy.code}</code>
+				{strategy.next && <span className="text-[0.65rem] uppercase tracking-[0.18em] text-muted border rounded-full px-2 py-0.5" style={{ borderColor: 'currentColor' }}>next release, not on npm yet</span>}
+			</div>
+			<p className="text-xs text-muted">{strategy.allows}</p>
+			{/* The box. Its right edge is the target; overflow is left visible on purpose. */}
 			<div
-				ref={containerRef}
 				style={{
-					width: `${containerPct}%`,
-					border: '1px solid color-mix(in oklch, var(--foreground) 25%, transparent)',
+					width: `${boxPct}%`,
+					fontSize: `${fontSize}px`,
+					border: '1px solid color-mix(in oklch, var(--foreground) 45%, transparent)',
 					borderRadius: 4,
-					padding: '8px 0',
-					overflow: 'hidden',
-					background: 'color-mix(in oklch, var(--foreground) 4%, transparent)',
+					background: 'color-mix(in oklch, var(--foreground) 5%, transparent)',
 				}}
 			>
 				<p
 					ref={elRef}
-					aria-hidden="true"
 					style={{
-						fontFamily: "'Roboto Flex', sans-serif",
-						fontSize: "clamp(2.5rem, 8vw, 6rem)",
+						fontFamily: font.family,
 						fontWeight: 400,
-						lineHeight: 1.1,
+						lineHeight: 1.15,
 						margin: 0,
+						padding: '0.08em 0',
 						display: 'inline-block',
 						whiteSpace: 'nowrap',
 					}}
@@ -103,41 +245,76 @@ function HeadlineRow({ text, containerPct, prefer, showInternals }: { text: stri
 					{text}
 				</p>
 			</div>
-			{/* Live readout updated via ref to avoid state-driven re-renders */}
-			{showInternals && (
-				<div className="flex gap-6 text-xs text-muted font-mono tabular-nums">
-					<span ref={readoutRef} aria-live="polite" aria-atomic="true">fvs: —  ls: 0em</span>
+			<dl className="flex flex-wrap gap-x-6 gap-y-2" aria-live="off">
+				<Figure
+					name="wdth"
+					value={!usesAxis ? 'not used' : !r || r.axisValue === null ? '—' : r.limits.axis === 'inert' ? 'no effect' : String(+r.axisValue.toFixed(1))}
+					factor={usesAxis && r ? times(r.ratios.axis) : undefined}
+					note={usesAxis ? axisNote : undefined}
+				/>
+				<Figure
+					name="font size"
+					value={!usesSize ? `${fontSize} px, fixed` : !r ? '—' : `${+r.fontSize.toFixed(1)} px`}
+					factor={usesSize && r ? times(r.ratios.size) : undefined}
+					note={usesSize ? sizeNote : undefined}
+				/>
+				<Figure
+					name="tracking"
+					value={!usesTracking ? 'not used' : !r ? '—' : `${r.tracking > 0 ? '+' : ''}${+r.tracking.toFixed(3)}em`}
+					factor={usesTracking && r ? times(r.ratios.tracking) : undefined}
+					note={usesTracking ? trackingNote : undefined}
+				/>
+				<div className="flex flex-col gap-0.5 flex-1 min-w-[14rem]">
+					<dt className="text-[0.65rem] uppercase tracking-[0.18em] text-muted">result</dt>
+					<dd className="text-xs" data-verdict>{r ? verdict(r) : 'Measuring…'}</dd>
 				</div>
-			)}
+			</dl>
 		</div>
 	)
 }
 
-/** Interactive demo with container width slider, prefer mode toggle, cursor/gyro, and angular width */
+/** One bar on the reach ruler (three are stacked), in px of the demo's width. */
+function Band({ row, from, to, label }: { row: number; from: number; to: number; label: string }) {
+	return (
+		<div
+			title={label}
+			style={{
+				position: 'absolute', top: 6 + row * 18, height: 12, borderRadius: 2,
+				left: Math.max(0, from), width: Math.max(1, to - Math.max(0, from)),
+				background: `color-mix(in oklch, var(--foreground) ${row === 0 ? 85 : 45}%, transparent)`,
+			}}
+		/>
+	)
+}
+
+/** Interactive demo: font, size, headline and box width controls; the reach ruler; four strategies. */
 export default function Demo() {
-	const [containerPct, setContainerPct] = useState(80)
-	const [prefer, setPrefer] = useState<PreferMode>('auto')
-	const [showInternals, setShowInternals] = useState(true)
+	// null: the visitor hasn't moved the slider yet, so the default for this screen width applies.
+	const [boxChoice, setBoxPct] = useState<number | null>(null)
+	const [fontId, setFontId] = useState(FONTS[0].id)
+	const [sizeChoice, setFontSize] = useState<number | null>(null)
+	// Narrow screens start with a smaller headline and a wider box, so the first view isn't all overflow.
+	const narrow = useMediaQuery('(max-width: 640px)')
+	const boxPct = boxChoice ?? (narrow ? 75 : 45)
+	const fontSize = sizeChoice ?? (narrow ? 36 : 64)
+	const [text, setText] = useState(PRESETS[0])
+	const [fullRange, setFullRange] = useState(false)
 
 	// Interaction modes — mutually exclusive
 	const [cursorMode, setCursorMode] = useState(false)
 	const [gyroMode, setGyroMode] = useState(false)
-	const [angularMode, setAngularMode] = useState(false)
-
-	// Angular mode parameters
-	const [viewingDistanceCm, setViewingDistanceCm] = useState(60)
-	const [angleDeg, setAngleDeg] = useState(5)
-
-	// Ref to the outer wrapper to measure actual container pixel width for angular computation
-	const demoRef = useRef<HTMLDivElement>(null)
-	// Measured pixel width of the demo wrapper — kept in state so angular pct recomputes on resize
-	const [demoWidth, setDemoWidth] = useState(800)
-
-	// Gyro-driven container pct — kept separate from slider state so slider value props
-	// never change during gyro mode (which would cause mobile to scroll to the input)
-	const [gyroContainerPct, setGyroContainerPct] = useState(80)
+	// Gyro-driven box width — kept separate from slider state so the slider's value prop never
+	// changes during gyro mode (which would make mobile browsers scroll to the input)
+	const [gyroBoxPct, setGyroBoxPct] = useState(45)
 	// Permission denial feedback for iOS gyro
 	const [gyroDenied, setGyroDenied] = useState(false)
+
+	// Width of the demo in px, and a counter bumped when web fonts finish loading: both refit the rows.
+	const demoRef = useRef<HTMLDivElement>(null)
+	const probeRef = useRef<HTMLParagraphElement>(null)
+	const [demoWidth, setDemoWidth] = useState(0)
+	const [fontsLoaded, setFontsLoaded] = useState(0)
+	const [reach, setReach] = useState<Reach | null>(null)
 
 	// Detected capabilities — resolved client-side after mount
 	const showCursor = useMediaQuery('(hover: hover)')
@@ -145,7 +322,12 @@ export default function Demo() {
 	const hasOrientation = useClientValue(() => 'DeviceOrientationEvent' in window, false)
 	const showGyro = isTouch && hasOrientation
 
-	// Track demo wrapper width for accurate angular pct computation
+	const font = FONTS.find(f => f.id === fontId) ?? FONTS[0]
+	const [rangeMin, rangeMax] = searchRange(font, fullRange)
+	const effectiveBoxPct = gyroMode ? gyroBoxPct : boxPct
+	const shownText = text.trim() ? text : PRESETS[0]
+
+	// Track the demo's width so the ruler and the rows share one px scale.
 	useEffect(() => {
 		const el = demoRef.current
 		if (!el || typeof ResizeObserver === 'undefined') return
@@ -153,34 +335,39 @@ export default function Demo() {
 			const w = entries[0]?.contentRect.width
 			if (w) setDemoWidth(w)
 		})
-		// observe() delivers an initial observation synchronously, so the first callback
-		// sets the real width — no separate post-mount measurement needed. Until then the
-		// useState(800) default applies, matching the old fallback exactly.
 		ro.observe(el)
 		return () => ro.disconnect()
 	}, [])
 
-	// Compute pixel target from angular parameters: 2 * distance_mm * tan(angle/2) * (96px/25.4mm)
-	const { angularPxRounded, angularContainerPct } = useMemo(() => {
-		const pxTarget = 2 * (viewingDistanceCm * 10) * Math.tan((angleDeg / 2) * (Math.PI / 180)) * (96 / 25.4)
-		return {
-			angularPxRounded: Math.round(pxTarget),
-			angularContainerPct: Math.min(100, Math.max(1, (pxTarget / demoWidth) * 100)),
+	// Load every demo font up front and refit when any font finishes loading: a fit measured in a
+	// fallback font is wrong.
+	useEffect(() => {
+		if (!document.fonts) return
+		let cancelled = false
+		const bump = () => { if (!cancelled) setFontsLoaded(n => n + 1) }
+		const families = ["'Roboto Flex'", "'FW Roboto'", "'Merriweather'", "'FW Anybody'"]
+		Promise.all(families.map(f => document.fonts.load(`400 32px ${f}`).catch(() => []))).then(bump)
+		document.fonts.ready.then(bump).catch(() => {})
+		document.fonts.addEventListener('loadingdone', bump)
+		return () => {
+			cancelled = true
+			document.fonts.removeEventListener('loadingdone', bump)
 		}
-	}, [viewingDistanceCm, angleDeg, demoWidth])
+	}, [])
 
-	// Effective container pct — priority: gyro > angular > slider
-	const effectiveContainerPct = gyroMode
-		? gyroContainerPct
-		: angularMode
-			? angularContainerPct
-			: containerPct
+	// Measure how far each lever reaches for the current headline.
+	useEffect(() => {
+		const probe = probeRef.current
+		if (!probe) return
+		const id = requestAnimationFrame(() => setReach(measureReach(probe, [rangeMin, rangeMax], !!font.wdth, fontSize)))
+		return () => cancelAnimationFrame(id)
+	}, [font, rangeMin, rangeMax, fontSize, shownText, fontsLoaded, demoWidth])
 
-	// Cursor mode — X controls container width (left = narrow, right = wide)
+	// Cursor mode — X controls box width (left = narrow, right = wide)
 	useEffect(() => {
 		if (!cursorMode) return
 		const handleMove = (e: MouseEvent) => {
-			setContainerPct(Math.round(30 + (e.clientX / window.innerWidth) * (100 - 30)))
+			setBoxPct(Math.round(20 + (e.clientX / window.innerWidth) * (100 - 20)))
 		}
 		const handleKey = (e: KeyboardEvent) => {
 			if (e.key === 'Escape') setCursorMode(false)
@@ -193,10 +380,7 @@ export default function Demo() {
 		}
 	}, [cursorMode])
 
-	// Gyro mode — gamma (left/right tilt) controls container width.
-	// Updates gyroContainerPct (not slider state) so slider value props stay frozen,
-	// preventing mobile browsers from scrolling to the input on each orientation update.
-	// rAF throttle limits re-renders to one per frame.
+	// Gyro mode — gamma (left/right tilt) controls box width, throttled to one update per frame.
 	useEffect(() => {
 		if (!gyroMode) return
 		let rafId: number | null = null
@@ -205,8 +389,8 @@ export default function Demo() {
 			rafId = requestAnimationFrame(() => {
 				rafId = null
 				if (e.gamma !== null) {
-					// gamma: -90 (tilt left) to 90 (tilt right) → containerPct 30–100%
-					setGyroContainerPct(Math.round(30 + ((e.gamma + 90) / 180) * (100 - 30)))
+					// gamma: -90 (tilt left) to 90 (tilt right) → box width 20–100%
+					setGyroBoxPct(Math.round(20 + ((e.gamma + 90) / 180) * (100 - 20)))
 				}
 			})
 		}
@@ -217,15 +401,14 @@ export default function Demo() {
 		}
 	}, [gyroMode])
 
-	// Toggle cursor mode — turns off gyro and angular if active
+	// Toggle cursor mode — turns off gyro if active
 	const toggleCursor = useCallback(() => {
 		setGyroMode(false)
-		setAngularMode(false)
 		setGyroDenied(false)
 		setCursorMode(v => !v)
 	}, [])
 
-	// Toggle gyro mode — requests iOS permission if needed, turns off cursor and angular if active
+	// Toggle gyro mode — requests iOS permission if needed, turns off cursor if active
 	const toggleGyro = useCallback(async () => {
 		if (gyroMode) {
 			setGyroMode(false)
@@ -233,7 +416,6 @@ export default function Demo() {
 			return
 		}
 		setCursorMode(false)
-		setAngularMode(false)
 		setGyroDenied(false)
 		const DOE = DeviceOrientationEvent as typeof DeviceOrientationEvent & {
 			requestPermission?: () => Promise<PermissionState>
@@ -250,208 +432,192 @@ export default function Demo() {
 		}
 	}, [gyroMode])
 
-	// Toggle angular mode — turns off cursor and gyro if active
-	const toggleAngular = useCallback(() => {
-		setCursorMode(false)
-		setGyroMode(false)
-		setGyroDenied(false)
-		setAngularMode(v => !v)
-	}, [])
-
-	// activeMode: any non-default interaction mode is active
-	const activeMode = cursorMode || gyroMode || angularMode
+	const labelClass = "flex justify-between gap-3 text-xs uppercase tracking-[0.18em] font-medium text-muted"
+	const chip = (active: boolean): React.CSSProperties => ({
+		borderColor: active ? 'currentColor' : 'color-mix(in oklch, var(--foreground) 45%, transparent)',
+		background: active ? 'var(--btn-bg)' : 'transparent',
+		color: active ? 'var(--foreground)' : 'var(--foreground-muted)',
+	})
+	// The box's inner (content) width in px: what the rows are fitted to.
+	const boxPx = demoWidth ? Math.max(0, (demoWidth * effectiveBoxPct) / 100 - 2) : 0
+	const layoutKey = `${demoWidth}|${fontsLoaded}`
 
 	return (
 		<div ref={demoRef} className="w-full flex flex-col gap-8">
 			{/* Controls */}
-			<div className="flex flex-wrap items-center gap-6">
-				{/* Container width slider — hidden in angular mode */}
-				{!angularMode && (
-					<div className="flex flex-col gap-1 min-w-48 flex-1">
-						<div className="flex justify-between text-xs uppercase tracking-[0.18em] font-medium text-muted">
-							<span>Container Width</span>
-							{/* Show effective pct so label matches what headlines are actually fitted to */}
-							<span className="tabular-nums">{Math.round(effectiveContainerPct)}%</span>
-						</div>
-						<input
-							type="range"
-							min={30}
-							max={100}
-							step={1}
-							value={containerPct}
-							aria-label="Container width percentage"
-							aria-valuetext={`${Math.round(effectiveContainerPct)} percent`}
-							title={cursorMode || gyroMode ? "Disabled while cursor/gyro mode is active" : "Drag to resize the container — fitWidth will re-fit each headline to the new width"}
-							disabled={cursorMode || gyroMode}
-							onChange={e => setContainerPct(Number(e.target.value))}
-							onTouchStart={e => e.stopPropagation()}
-							style={{ touchAction: 'none', opacity: (cursorMode || gyroMode) ? 0.3 : undefined }}
-						/>
+			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-5">
+				<div className="flex flex-col gap-1">
+					<label htmlFor="fw-font" className={labelClass}><span>Font</span></label>
+					<select
+						id="fw-font"
+						value={fontId}
+						onChange={e => setFontId(e.target.value)}
+						className="text-sm rounded border px-2 py-1.5"
+						style={{ background: 'var(--btn-bg)', borderColor: 'color-mix(in oklch, var(--foreground) 45%, transparent)', color: 'var(--foreground)' }}
+					>
+						{FONTS.map(f => <option key={f.id} value={f.id}>{f.label}{f.wdth ? ` · wdth ${f.wdth[0]}–${f.wdth[1]}` : ''}</option>)}
+					</select>
+				</div>
+
+				<div className="flex flex-col gap-1">
+					<div className={labelClass}>
+						<span>Font size you set</span>
+						<span className="tabular-nums">{fontSize} px</span>
 					</div>
-				)}
+					<input
+						type="range" min={24} max={120} step={1} value={fontSize}
+						aria-label="Font size in pixels"
+						aria-valuetext={`${fontSize} pixels`}
+						onChange={e => setFontSize(Number(e.target.value))}
+						onTouchStart={e => e.stopPropagation()}
+						style={{ touchAction: 'none' }}
+					/>
+				</div>
 
-				{/* Angular mode sliders — shown only in angular mode */}
-				{angularMode && (
-					<>
-						<div className="flex flex-col gap-1 min-w-48 flex-1">
-							<div className="flex justify-between text-xs uppercase tracking-[0.18em] font-medium text-muted">
-								<span>Angular Width</span>
-								<span className="tabular-nums">{angleDeg}° <span style={{ opacity: 0.7 }}>(≈ {angularPxRounded}px)</span></span>
-							</div>
-							<input
-								type="range"
-								min={0.5}
-								max={20}
-								step={0.5}
-								value={angleDeg}
-								aria-label="Angular width in degrees"
-								aria-valuetext={`${angleDeg} degrees, approximately ${angularPxRounded} pixels`}
-								title="Set the visual angle subtended by the text — combined with viewing distance this determines the physical pixel width fitWidth targets"
-								onChange={e => setAngleDeg(Number(e.target.value))}
-								onTouchStart={e => e.stopPropagation()}
-								style={{ touchAction: 'none' }}
-							/>
-						</div>
-						<div className="flex flex-col gap-1 min-w-48 flex-1">
-							<div className="flex justify-between text-xs uppercase tracking-[0.18em] font-medium text-muted">
-								<span>Viewing Distance</span>
-								<span className="tabular-nums">{viewingDistanceCm}cm</span>
-							</div>
-							<input
-								type="range"
-								min={30}
-								max={150}
-								step={1}
-								value={viewingDistanceCm}
-								aria-label="Viewing distance in centimetres"
-								aria-valuetext={`${viewingDistanceCm} centimetres`}
-								title="Set how far the reader sits from the display — longer distances mean more pixels are needed to subtend the same angle"
-								onChange={e => setViewingDistanceCm(Number(e.target.value))}
-								onTouchStart={e => e.stopPropagation()}
-								style={{ touchAction: 'none' }}
-							/>
-						</div>
-					</>
-				)}
+				<div className="flex flex-col gap-1">
+					<div className={labelClass}>
+						<span>Box width</span>
+						<span className="tabular-nums">{Math.round(effectiveBoxPct)}%{boxPx ? ` · ${Math.round(boxPx)} px` : ''}</span>
+					</div>
+					<input
+						type="range" min={20} max={100} step={1} value={boxPct}
+						aria-label="Box width as a percentage of the demo"
+						aria-valuetext={`${Math.round(effectiveBoxPct)} percent`}
+						title={cursorMode || gyroMode ? "Disabled while cursor or tilt mode is active" : "Drag to resize the box; every row re-fits to the new width"}
+						disabled={cursorMode || gyroMode}
+						onChange={e => setBoxPct(Number(e.target.value))}
+						onTouchStart={e => e.stopPropagation()}
+						style={{ touchAction: 'none', opacity: (cursorMode || gyroMode) ? 0.3 : undefined }}
+					/>
+				</div>
 
-				{/* Prefer mode toggle */}
-				<div className="flex items-center gap-2 flex-shrink-0">
-					<span className="text-xs uppercase tracking-[0.18em] font-medium text-muted">Prefer</span>
-					{(['auto', 'axis', 'tracking'] as const).map(v => (
-						<button
-							key={v}
-							onClick={() => setPrefer(v)}
-							aria-pressed={prefer === v}
-							title={
-								v === 'auto'     ? 'Let fitWidth choose: uses the wdth axis first, falls back to letter-spacing when the axis range is exhausted' :
-								v === 'axis'     ? 'Fit using the variable font wdth axis only — letter-spacing is never touched' :
-								                   'Fit using letter-spacing only — wdth axis is never changed'
-							}
-							className="text-xs px-3 py-1 rounded-full border transition-opacity"
-							style={{
-								borderColor: 'currentColor',
-								opacity: prefer === v ? 1 : 0.4,
-								background: prefer === v ? 'var(--btn-bg)' : 'transparent',
-							}}
-						>
-							{v}
+				<div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-2">
+					<label htmlFor="fw-text" className={labelClass}><span>Headline (one line)</span></label>
+					<div className="flex flex-wrap items-center gap-2">
+						<input
+							id="fw-text"
+							type="text"
+							value={text}
+							maxLength={40}
+							onChange={e => setText(e.target.value)}
+							className="text-sm rounded border px-2 py-1.5 flex-1 min-w-40"
+							style={{ background: 'transparent', borderColor: 'color-mix(in oklch, var(--foreground) 45%, transparent)', color: 'var(--foreground)' }}
+						/>
+						{PRESETS.map(p => (
+							<button key={p} onClick={() => setText(p)} aria-pressed={text === p} className="text-xs px-3 py-1 rounded-full border" style={chip(text === p)}>
+								{p}
+							</button>
+						))}
+					</div>
+				</div>
+
+				<div className="flex flex-col gap-1" role="group" aria-label="wdth search range">
+					<div className={labelClass}><span>wdth range searched</span><span className="tabular-nums">{font.wdth ? `${rangeMin}–${rangeMax}` : 'none'}</span></div>
+					<div className="flex flex-wrap gap-2">
+						<button onClick={() => setFullRange(false)} aria-pressed={!fullRange} className="text-xs px-3 py-1 rounded-full border" style={chip(!fullRange)}>
+							Default 75–125
 						</button>
-					))}
-				</div>
-
-				{/* Show/hide internals toggle */}
-				<button
-					onClick={() => setShowInternals(v => !v)}
-					aria-pressed={showInternals}
-					title="Toggle the live fontVariationSettings and letter-spacing readout beneath each headline"
-					className="text-xs px-3 py-1 rounded-full border transition-opacity"
-					style={{ borderColor: 'currentColor', opacity: showInternals ? 1 : 0.4, background: showInternals ? 'var(--btn-bg)' : 'transparent' }}
-				>
-					{showInternals ? 'Hide internals' : 'Show internals'}
-				</button>
-			</div>
-
-			{/* Cursor / gyro / angular mode toggles */}
-			<div className="flex flex-wrap items-center gap-3">
-				{showCursor && (
-					<button
-						onClick={toggleCursor}
-						aria-pressed={cursorMode}
-						title="Move cursor left/right to control container width"
-						className="flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border transition-all"
-						style={{
-							borderColor: 'currentColor',
-							opacity: cursorMode ? 1 : 0.5,
-							background: cursorMode ? 'var(--btn-bg)' : 'transparent',
-						}}
-					>
-						<CursorIcon />
-						<span>{cursorMode ? 'Esc to exit' : 'Cursor'}</span>
-					</button>
-				)}
-				{showGyro && (
-					<button
-						onClick={toggleGyro}
-						aria-pressed={gyroMode}
-						title="Tilt left/right to control container width"
-						className="flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border transition-all"
-						style={{
-							borderColor: 'currentColor',
-							opacity: gyroMode ? 1 : 0.5,
-							background: gyroMode ? 'var(--btn-bg)' : 'transparent',
-						}}
-					>
-						<GyroIcon />
-						<span>{gyroMode ? 'Tilt active' : 'Tilt'}</span>
-					</button>
-				)}
-				<button
-					onClick={toggleAngular}
-					aria-pressed={angularMode}
-					title="Angular mode: replaces the width slider with angular (degrees) and viewing-distance controls. The container width is derived from a visual angle rather than a percentage."
-					className="text-xs px-3 py-1 rounded-full border transition-all"
-					style={{
-						borderColor: 'currentColor',
-						opacity: angularMode ? 1 : 0.5,
-						background: angularMode ? 'var(--btn-bg)' : 'transparent',
-					}}
-				>
-					Angular
-				</button>
-				{/* aria-live region so screen readers hear the hint when a mode activates */}
-				<div aria-live="polite" aria-atomic="true" className="contents">
-					{activeMode && (
-						<p className="text-xs text-muted italic">
-							{cursorMode
-								? 'Move cursor left/right to adjust container width. Press Esc to exit.'
-								: gyroMode
-									? 'Tilt left/right to adjust container width.'
-									: 'Angular mode active — width is set by degrees and viewing distance.'}
-						</p>
-					)}
-					{gyroDenied && (
-						<p className="text-xs opacity-70 italic" style={{ color: 'rgb(255 150 150)' }}>
-							Motion permission denied. Enable motion access in your device settings to use tilt mode.
-						</p>
-					)}
+						<button onClick={() => setFullRange(true)} aria-pressed={fullRange} disabled={!font.wdth} className="text-xs px-3 py-1 rounded-full border" style={{ ...chip(fullRange), opacity: font.wdth ? undefined : 0.4 }}>
+							Font’s full range{font.wdth ? ` ${font.wdth[0]}–${font.wdth[1]}` : ''}
+						</button>
+					</div>
 				</div>
 			</div>
 
-			{/* Headlines */}
-			<div className="flex flex-col gap-6">
-				{HEADLINES.map((text) => (
-					<HeadlineRow
-						key={text}
-						text={text}
-						containerPct={effectiveContainerPct}
-						prefer={prefer}
-						showInternals={showInternals}
+			<p className="text-xs text-muted -mt-4">
+				{font.note}
+				{font.wdth && !fullRange && (font.wdth[0] > DEFAULT_RANGE[0] || font.wdth[1] < DEFAULT_RANGE[1]) && ` fitWidth’s default search is 75–125, but this font only has ${font.wdth[0]}–${font.wdth[1]}, so ${rangeMin}–${rangeMax} is searched.`}
+			</p>
+
+			{/* Cursor / tilt toggles */}
+			{(showCursor || showGyro) && (
+				<div className="flex flex-wrap items-center gap-3 -mt-4">
+					{showCursor && (
+						<button onClick={toggleCursor} aria-pressed={cursorMode} title="Move the cursor left and right to set the box width" className="flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border" style={chip(cursorMode)}>
+							<CursorIcon />
+							<span>{cursorMode ? 'Esc to exit' : 'Cursor sets box width'}</span>
+						</button>
+					)}
+					{showGyro && (
+						<button onClick={toggleGyro} aria-pressed={gyroMode} title="Tilt left and right to set the box width" className="flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border" style={chip(gyroMode)}>
+							<GyroIcon />
+							<span>{gyroMode ? 'Tilt active' : 'Tilt sets box width'}</span>
+						</button>
+					)}
+					<div aria-live="polite" aria-atomic="true" className="contents">
+						{gyroDenied && (
+							<p className="text-xs text-muted italic">
+								Motion permission denied. Enable motion access in your device settings to use tilt.
+							</p>
+						)}
+					</div>
+				</div>
+			)}
+
+			{/* Hidden probe for the reach measurements, laid out like a row's headline */}
+			<div aria-hidden="true" style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', left: 0, top: 0, width: 0, height: 0, overflow: 'hidden' }}>
+				<p ref={probeRef} style={{ fontFamily: font.family, fontWeight: 400, lineHeight: 1.15, margin: 0, display: 'inline-block', whiteSpace: 'nowrap' }}>{shownText}</p>
+			</div>
+
+			{/* Reach ruler */}
+			<div className="flex flex-col gap-3" data-reach>
+				<h3 className="text-xs uppercase tracking-[0.18em] font-medium text-muted">How far each lever reaches</h3>
+				{reach && demoWidth > 0 ? (
+					<>
+						<p className="text-sm leading-relaxed" data-reach-summary>
+							“{shownText}” is <strong>{px(reach.natural)}</strong> wide as set ({font.label}, {fontSize} px). The box is <strong>{px(boxPx)}</strong>, which is <strong>{pct(boxPx, reach.natural)}</strong> of that.{' '}
+							{font.wdth
+								? <>On its own, wdth {rangeMin}–{rangeMax} can make it <strong>{pct(reach.axis[0], reach.natural)} to {pct(reach.axis[1], reach.natural)}</strong> of its set width ({px(reach.axis[0])} to {px(reach.axis[1])}).{' '}
+									{boxPx >= reach.axis[0] - 0.5 && boxPx <= reach.axis[1] + 0.5
+										? 'The box is inside that range, so the axis can do this fit alone.'
+										: boxPx > reach.axis[1]
+											? 'The box is wider than that, so the axis runs out and something else has to do the rest.'
+											: 'The box is narrower than that, so the axis runs out and something else has to do the rest.'}</>
+								: 'This font has no wdth axis, so the axis can’t change its width at all.'}
+						</p>
+						<div aria-hidden="true" style={{ position: 'relative', height: 60, overflow: 'hidden', borderRadius: 4, border: '1px solid color-mix(in oklch, var(--foreground) 25%, transparent)' }}>
+							<Band row={0} from={reach.axis[0]} to={reach.axis[1]} label="wdth alone" />
+							<Band row={1} from={reach.tracking[0]} to={reach.tracking[1]} label="wdth and ±0.3em tracking" />
+							<Band row={2} from={reach.size[0]} to={reach.size[1]} label="wdth, font size 0.5–2× and ±0.05em tracking" />
+							{/* Natural width tick */}
+							<div style={{ position: 'absolute', top: 0, bottom: 0, left: reach.natural, width: 0, borderLeft: '1px dashed var(--foreground)' }} />
+							{/* Box edge */}
+							<div style={{ position: 'absolute', top: 0, bottom: 0, left: Math.min(demoWidth - 3, boxPx), width: 3, background: 'var(--foreground)' }} />
+						</div>
+						<ul className="flex flex-col gap-1 text-xs text-muted">
+							<li>Top bar, <strong>wdth alone</strong>: <span className="font-mono tabular-nums">{pct(reach.axis[0], reach.natural)}–{pct(reach.axis[1], reach.natural)}</span> of the width as set</li>
+							<li>Middle bar, wdth plus ±{DEFAULT_TRACKING}em tracking: <span className="font-mono tabular-nums">{pct(reach.tracking[0], reach.natural)}–{pct(reach.tracking[1], reach.natural)}</span></li>
+							<li>Bottom bar, wdth plus font size {SIZE_RANGE[0]}–{SIZE_RANGE[1]}× and ±{SIZED_TRACKING}em tracking: <span className="font-mono tabular-nums">{pct(reach.size[0], reach.natural)}–{pct(reach.size[1], reach.natural)}</span></li>
+							<li>Dashed line: the width as set. Solid line: the box edge. Where the solid line misses a bar, that combination can’t reach the box.</li>
+						</ul>
+						<p className="text-xs text-muted">The ruler is drawn at the same scale as the boxes below: 1 px is 1 px. Measured in your browser, for this headline, font and size.</p>
+					</>
+				) : (
+					<p className="text-sm text-muted">Measuring…</p>
+				)}
+			</div>
+
+			{/* The same headline, four ways */}
+			<div className="flex flex-col gap-10">
+				<h3 className="text-xs uppercase tracking-[0.18em] font-medium text-muted">One headline, one box, four ways to fit it</h3>
+				{STRATEGIES.map(s => (
+					<StrategyRow
+						key={s.id}
+						strategy={s}
+						text={shownText}
+						font={font}
+						rangeMin={rangeMin}
+						rangeMax={rangeMax}
+						fontSize={fontSize}
+						boxPct={effectiveBoxPct}
+						layoutKey={layoutKey}
 					/>
 				))}
 			</div>
 
-			<p className="text-xs text-muted italic" style={{ lineHeight: "1.8" }}>
-				Each headline fills its container exactly — to within half a pixel. Drag the slider to resize the container. Switch prefer mode to see the wdth axis or letter-spacing used in isolation. Smartwatches and fixed-width displays make this non-negotiable — a headline that almost fills a round watch face looks broken; one that fills it exactly looks intentional.
+			<p className="text-xs text-muted" style={{ lineHeight: "1.8" }}>
+				{font.id === 'roboto-flex' && 'Roboto Flex has an optical-size axis that follows font size, so a 2× font size is not 2× the width, and its wdth reach is smaller at small sizes: drag “Font size you set” and watch the ruler. '}
+				Each “×” is how much that step changed the headline’s width; multiply them and you get the fitted width over the width as set. A fit is never wider than the box and at most half a pixel narrower. When every range a strategy may use has run out, the row says how far short (or over) it ended: fitWidth stops there and warns in the console. It does not force the fit. The numbers under each row come from the object <code className="font-mono">applyFitWidth</code> returns.
 			</p>
 		</div>
 	)
