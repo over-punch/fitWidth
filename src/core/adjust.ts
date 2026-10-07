@@ -17,10 +17,12 @@ interface SavedStyles {
 	letterSpacing: string
 	/** el.style.fontSize before fitWidth wrote it (only written when the `size` option is on) */
 	fontSize: string
+	/** el.style.marginRight before fitWidth wrote it (only written when tracking is added) */
+	marginRight: string
 	/** Whether the element had a style attribute at all, so removeFitWidth can leave it as found */
 	hadStyleAttr: boolean
 	/** The values fitWidth last wrote; a different value found later was set by the author */
-	written: { fvs: string; letterSpacing: string; fontSize: string } | null
+	written: { fvs: string; letterSpacing: string; fontSize: string; marginRight: string } | null
 }
 
 /**
@@ -150,13 +152,18 @@ class CloneMeasureBackend implements MeasureBackend {
 		this.scale = el.parentElement ? layoutScale(el.parentElement) : 1
 	}
 
-	/** Width of the element (border box, layout px) with the trial style; `text` is the element's own. */
+	/**
+	 * Width of the element (border box, layout px) with the trial style; `text` is the element's own.
+	 * Browsers add letter-spacing after the last letter too. That trailing space is not part of the
+	 * text, so the tracking the fit adds is taken off the width once: the fit then lands the last
+	 * letter on the target, not the empty space after it.
+	 */
 	measureText(_text: string, style: TextStyle): Size {
 		this.clone.style.fontVariationSettings = style.fontVariationSettings ?? ''
 		this.clone.style.fontSize = style.fontSize ? `${style.fontSize}px` : this.inlineFontSize
 		this.clone.style.letterSpacing = style.letterSpacing ? `calc(${this.baseSpacing} + ${style.letterSpacing}px)` : this.baseSpacing
 		const rect = this.clone.getBoundingClientRect()
-		return { width: rect.width / this.scale, height: rect.height / this.scale }
+		return { width: rect.width / this.scale - (style.letterSpacing ?? 0), height: rect.height / this.scale }
 	}
 
 	/** Removes the clone. */
@@ -383,7 +390,8 @@ function searchSize(
  * axis, then (only with the `size` option) font size, then letter-spacing.
  *
  * Does NOT wrap content in spans or rewrite innerHTML — only sets
- * el.style.fontVariationSettings, el.style.letterSpacing and (with `size`) el.style.fontSize,
+ * el.style.fontVariationSettings, el.style.letterSpacing (with a matching el.style.marginRight that
+ * cancels the space browsers add after the last letter) and, with `size`, el.style.fontSize,
  * once, after the search.
  *
  * Calling applyFitWidth multiple times is idempotent: original styles are saved
@@ -448,6 +456,7 @@ export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): F
 			fvs: el.style.fontVariationSettings,
 			letterSpacing: el.style.letterSpacing,
 			fontSize: el.style.fontSize,
+			marginRight: el.style.marginRight,
 			hadStyleAttr: el.hasAttribute('style'),
 			written: null,
 		})
@@ -461,10 +470,12 @@ export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): F
 		if (el.style.fontVariationSettings !== saved.written.fvs) saved.fvs = el.style.fontVariationSettings
 		if (el.style.letterSpacing !== saved.written.letterSpacing) saved.letterSpacing = el.style.letterSpacing
 		if (el.style.fontSize !== saved.written.fontSize) saved.fontSize = el.style.fontSize
+		if (el.style.marginRight !== saved.written.marginRight) saved.marginRight = el.style.marginRight
 	}
 	el.style.fontVariationSettings = saved.fvs
 	el.style.letterSpacing = saved.letterSpacing
 	if (el.style.fontSize !== saved.fontSize) el.style.fontSize = saved.fontSize
+	if (el.style.marginRight !== saved.marginRight) el.style.marginRight = saved.marginRight
 
 	// Resolve target width (read AFTER reset so parent geometry is stable)
 	const targetWidth = resolveTarget(el, options.target)
@@ -478,6 +489,8 @@ export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): F
 	// Tracking is added to the author's letter-spacing rather than replacing it. When font size can
 	// change, the author's spacing is carried in em so it scales with the fitted size.
 	const basePx = !cs.letterSpacing || cs.letterSpacing === 'normal' ? 0 : parseFloat(cs.letterSpacing) || 0
+	// The author's own right margin (px), which the trailing-space correction is added to.
+	const baseMargin = parseFloat(cs.marginRight) || 0
 	const sizing = !!sizeRange && fontSize > 0
 	const baseSpacing = basePx === 0
 		? '0px'
@@ -533,6 +546,9 @@ export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): F
 			// neighbouring values (any letter-spacing turns a font's ligatures off), so none lands on it.
 			limits.tracking = inRange(t.gap) ? null : Math.abs(t.value) < maxTracking * 0.999 ? 'stepped' : t.value < 0 ? 'min' : 'max'
 			el.style.letterSpacing = spacing(t.value)
+			// Cancel the space the browser adds after the last letter, so the element's box ends where
+			// its last letter does (and negative tracking doesn't leave the last letter outside the box).
+			if (t.value !== 0) el.style.marginRight = baseMargin === 0 ? `${-t.value}em` : `calc(${baseMargin}px + ${-t.value}em)`
 		} else if (sized !== undefined && baseSpacing !== '0px') {
 			// The clone was measured with the author's spacing in em: write the same on the element.
 			el.style.letterSpacing = baseSpacing
@@ -541,9 +557,11 @@ export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): F
 	} finally {
 		backend.dispose()
 	}
-	saved.written = { fvs: el.style.fontVariationSettings, letterSpacing: el.style.letterSpacing, fontSize: el.style.fontSize }
+	saved.written = { fvs: el.style.fontVariationSettings, letterSpacing: el.style.letterSpacing, fontSize: el.style.fontSize, marginRight: el.style.marginRight }
 	if (finalGap > 0.5) {
-		warnOnce('overflow', `[fitWidth] the text is still ${finalGap.toFixed(1)}px wider than its target at the end of the axis and tracking ranges (widen axisMin/axisMax or maxTracking${sizing ? '' : ', or turn on size'})`)
+		// Name only the levers this call was allowed to use. Printed once per combination of levers.
+		const used = [prefer !== 'tracking' ? `the ${axis} range (axisMin/axisMax)` : '', sizing ? 'the size range' : '', prefer !== 'axis' ? 'maxTracking' : ''].filter(Boolean)
+		warnOnce(`overflow:${prefer}:${sizing}`, `[fitWidth] the text is still ${finalGap.toFixed(1)}px wider than its target with ${used.join(', ')} used up. Widen ${used.length > 1 ? 'one of them' : 'it'}${sizing ? '' : ', or turn on size'}. (This warning is printed once; the returned result reports every fit.)`)
 	}
 
 	// Restore scroll after style mutations
@@ -585,6 +603,7 @@ export function removeFitWidth(el: HTMLElement): void {
 	el.style.fontVariationSettings = saved.fvs
 	el.style.letterSpacing = saved.letterSpacing
 	if (el.style.fontSize !== saved.fontSize) el.style.fontSize = saved.fontSize
+	if (el.style.marginRight !== saved.marginRight) el.style.marginRight = saved.marginRight
 	// Leave no empty style="" behind on an element that had no style attribute.
 	if (!saved.hadStyleAttr && !el.getAttribute('style')) el.removeAttribute('style')
 	savedStyles.delete(el)

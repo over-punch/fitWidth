@@ -83,7 +83,11 @@ export interface FitWidthResult {
 	target: number
 	/** The text's width as authored, before any fitting */
 	natural: number
-	/** The text's width after the fit */
+	/**
+	 * The text's width after the fit. Letter-spacing the fit added is counted between letters only:
+	 * the space browsers add after the last letter is left out (and cancelled with a right margin),
+	 * so this is where the last letter ends.
+	 */
 	width: number
 	/** width − target: 0 to −tolerance when the text fits; more negative when it falls short; positive when it overflows */
 	gap: number
@@ -107,8 +111,8 @@ export interface FitWidthResult {
 	 */
 	ratios: { axis: number; size: number; tracking: number }
 	/**
-	 * Where each stage ended. `axis` is 'inert' when the axis doesn't change this font's width
-	 * (the font doesn't have it). `tracking` is 'stepped' when no letter-spacing value lands on the
+	 * Where each stage ended. `axis` is 'inert' when the axis doesn't change this text's width
+	 * (the font doesn't have it, or the characters come from a fallback font). `tracking` is 'stepped' when no letter-spacing value lands on the
 	 * target: any non-zero letter-spacing turns a font's ligatures off, which jumps the width, and a
 	 * target inside that jump can't be reached by tracking. A stage that wasn't used is null.
 	 */

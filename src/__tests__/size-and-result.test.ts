@@ -97,14 +97,14 @@ describe('the result object', () => {
 		restore = mockLayout(900)
 		const { el } = make()
 		const r = applyFitWidth(el) as FitWidthResult
-		// wdth 125 → 500px; +0.3em × 3 letters × 100px → 590px. Still 310px short of 900.
+		// wdth 125 → 500px; +0.3em in the 2 gaps between 3 letters at 100px → 560px. Still 340px short of 900.
 		expect(r.status).toBe('short')
 		expect(r.axisValue).toBe(125)
 		expect(r.limits.axis).toBe('max')
 		expect(r.limits.tracking).toBe('max')
 		expect(r.tracking).toBeCloseTo(0.3, 3)
-		expect(r.width).toBeCloseTo(590, 0)
-		expect(r.gap).toBeCloseTo(-310, 0)
+		expect(r.width).toBeCloseTo(560, 0)
+		expect(r.gap).toBeCloseTo(-340, 0)
 		expect(el.style.fontSize).toBe('100px')
 	})
 
@@ -120,8 +120,8 @@ describe('the result object', () => {
 	})
 
 	it('calls a sliver over the target an overflow, never a fit', () => {
-		// −0.3em × 3 × 100px takes 300px (wdth 75) to 210px: 0.2px wider than a 209.8px box.
-		restore = mockLayout(209.8)
+		// −0.3em in 2 gaps at 100px takes 300px (wdth 75) to 240px: 0.2px wider than a 239.8px box.
+		restore = mockLayout(239.8)
 		const { el } = make()
 		const r = applyFitWidth(el) as FitWidthResult
 		expect(r.gap).toBeGreaterThan(0)
@@ -255,26 +255,27 @@ describe('size: font size takes over when the axis runs out', () => {
 		restore = mockLayout(2000)
 		const { el } = make()
 		const r = applyFitWidth(el, { size: true }) as FitWidthResult
-		// wdth 125 × 2× size → 1000px; +0.05em × 3 × 200px → 1030px.
+		// wdth 125 × 2× size → 1000px; +0.05em in 2 gaps at 200px → 1020px.
 		expect(r.fontSize).toBe(200)
 		expect(r.limits.size).toBe('max')
 		expect(r.tracking).toBeCloseTo(0.05, 3)
 		expect(r.limits.tracking).toBe('max')
 		expect(r.status).toBe('short')
-		expect(r.width).toBeCloseTo(1030, 0)
-		expect(textWidth(el)).toBeCloseTo(r.width, 2)
+		expect(r.width).toBeCloseTo(1020, 0)
+		// The element's box still holds the space after the last letter; the margin cancels it.
+		expect(textWidth(el) - spacingOf(el)).toBeCloseTo(r.width, 2)
 	})
 
 	it('honours an explicit maxTracking and custom multipliers', () => {
-		restore = mockLayout(700)
+		restore = mockLayout(660)
 		const { el } = make()
 		const r = applyFitWidth(el, { size: { min: 0.8, max: 1.2 }, maxTracking: 0.3 }) as FitWidthResult
-		// wdth 125 × 1.2 → 600px; +0.3em × 3 × 120 → up to 708px, so tracking closes it.
+		// wdth 125 × 1.2 → 600px; +0.3em in 2 gaps at 120px reaches 672px, so tracking closes 660 at 0.25em.
 		expect(r.fontSize).toBe(120)
 		expect(r.limits.size).toBe('max')
 		expect(r.status).toBe('fit')
-		expect(r.tracking).toBeGreaterThan(0.27)
-		expect(r.tracking).toBeLessThan(0.28)
+		expect(r.tracking).toBeGreaterThan(0.245)
+		expect(r.tracking).toBeLessThanOrEqual(0.25)
 	})
 
 	it('uses font size, then tracking, and never the axis for prefer: tracking', () => {
@@ -357,5 +358,67 @@ describe('size: font size takes over when the axis runs out', () => {
 		expect(console.warn).toHaveBeenCalled()
 		expect(r.fontSize).toBe(100)
 		expect(el.style.fontSize).toBe('100px')
+	})
+})
+
+describe('tracking lands the last letter on the target', () => {
+	it('does not count the space after the last letter, and cancels it with a right margin', () => {
+		// wdth 125 → 500px; a 540px box needs 40px in the 2 gaps: 0.2em. The box then holds 60px of spacing.
+		restore = mockLayout(540)
+		const { el } = make()
+		const r = applyFitWidth(el) as FitWidthResult
+		expect(r.status).toBe('fit')
+		expect(r.tracking).toBeGreaterThan(0.197)
+		expect(r.tracking).toBeLessThanOrEqual(0.2)
+		const lastLetterEnd = textWidth(el) - spacingOf(el)
+		expect(lastLetterEnd).toBeLessThanOrEqual(540)
+		expect(lastLetterEnd).toBeGreaterThanOrEqual(539.5)
+		expect(el.style.marginRight).toMatch(/em$/)
+		expect(parseFloat(el.style.marginRight)).toBeCloseTo(-r.tracking, 5)
+	})
+
+	it('keeps the last letter inside the box with negative tracking', () => {
+		// wdth 75 → 300px; a 260px box needs −40px in 2 gaps: −0.2em.
+		restore = mockLayout(260)
+		const { el } = make()
+		const r = applyFitWidth(el) as FitWidthResult
+		expect(r.status).toBe('fit')
+		expect(r.tracking).toBeLessThan(-0.2)
+		expect(textWidth(el) - spacingOf(el)).toBeLessThanOrEqual(260)
+		expect(parseFloat(el.style.marginRight)).toBeCloseTo(-r.tracking, 5) // a positive margin: the box is narrower than the ink
+		expect(parseFloat(el.style.marginRight)).toBeGreaterThan(0)
+	})
+
+	it('adds the correction to the author’s own right margin, and restores it', () => {
+		restore = mockLayout(540)
+		const { el } = make('font-size: 100px; margin-right: 12px')
+		const r = applyFitWidth(el) as FitWidthResult
+		expect(el.style.marginRight).toMatch(/^calc\(12px \+ -0\.19\d+em\)$/)
+		const first = el.style.marginRight
+		applyFitWidth(el) // idempotent: starts again from the author's 12px
+		expect(el.style.marginRight).toBe(first)
+		expect(r.tracking).toBeGreaterThan(0.19)
+		removeFitWidth(el)
+		expect(el.style.marginRight).toBe('12px')
+	})
+
+	it('writes no margin when no tracking is added', () => {
+		restore = mockLayout(450)
+		const { el } = make()
+		applyFitWidth(el)
+		expect(el.style.marginRight).toBe('')
+		restore()
+		restore = mockLayout(900)
+		applyFitWidth(el, { size: true })
+		expect(el.style.marginRight).toBe('')
+	})
+
+	it('names only the levers it was allowed to use in the overflow warning', () => {
+		restore = mockLayout(150)
+		const { el } = make()
+		applyFitWidth(el, { prefer: 'axis' })
+		const msg = (console.warn as unknown as { mock: { calls: string[][] } }).mock.calls.map((c) => c[0]).find((m) => m.includes('wider than its target')) ?? ''
+		expect(msg).toContain('axisMin/axisMax')
+		expect(msg).not.toContain('maxTracking')
 	})
 })
