@@ -41,7 +41,7 @@ export default function Home() {
 					Fit Width fits a one-line headline to a target width. It searches the font&rsquo;s <code className="text-sm font-mono">wdth</code> axis first, at the size you set, then closes what is left with letter-spacing.
 				</p>
 				<p className="text-base leading-relaxed max-w-xl">
-					The axis reaches less far than its numbers suggest. Across 21 Google Fonts families we measured, <code className="text-sm font-mono">wdth</code> 75&ndash;125 moved a headline to a median of 80% to 113% of its natural width. Past that, something else is doing the fitting. The demo below shows what, for any headline and box you choose.
+					In most fonts the axis is a fine adjustment. Across 21 Google Fonts families with a <code className="text-sm font-mono">wdth</code> axis, values 75&ndash;125 moved a headline to a median of 80% to 113% of its natural width; a few fonts drawn for width reach much further. When a box is further away than the axis can reach, something else is doing the fitting. The demo below shows what, for any headline and box you choose.
 				</p>
 			</Hero>
 
@@ -59,11 +59,12 @@ export default function Home() {
 				<div className="prose-grid grid grid-cols-1 sm:grid-cols-2 gap-12 text-sm leading-relaxed">
 					<div className="flex flex-col gap-3">
 						<p className="font-semibold text-base">The width axis is a fine adjustment</p>
-						<p>A <code className="text-xs font-mono">wdth</code> value is not a percentage of width you can count on. Roboto Flex at <code className="text-xs font-mono">wdth</code> 75 is 83% as wide at 72 px and 96% as wide at 14 px, because its optical size changes the reach. Of the 97 Google Fonts families with a <code className="text-xs font-mono">wdth</code> axis, 49 stop at 100 and can&rsquo;t widen at all. Use the axis for the last 10&ndash;20% of a fit.</p>
+						<p>A <code className="text-xs font-mono">wdth</code> value is not a percentage of width you can count on. Roboto Flex at <code className="text-xs font-mono">wdth</code> 75 is 83% as wide at 72 px and 96% as wide at 14 px, because its optical size changes the reach. Of the 97 Google Fonts families with a <code className="text-xs font-mono">wdth</code> axis, 49 stop at 100 and can&rsquo;t widen at all. In most of them, plan on the axis for the last 10&ndash;20% of a fit. Fonts drawn for width are the exception: Anybody reaches 68&ndash;132% over the same 75&ndash;125.</p>
 					</div>
 					<div className="flex flex-col gap-3">
 						<p className="font-semibold text-base">Three levers, in a fixed order</p>
-						<p>First the axis, at the font size you set (default search range 75&ndash;125). Then, only if you turn on <code className="text-xs font-mono">size</code>, font size from 0.5&times; to 2&times; <Next />. Then letter-spacing, capped at &plusmn;0.3em, or &plusmn;0.05em when <code className="text-xs font-mono">size</code> is on. <code className="text-xs font-mono">prefer</code> can restrict it to the axis or to tracking alone. Font size never changes unless you ask for it.</p>
+						<p>First the axis, at the font size you set (default search range 75&ndash;125). Then, only if you turn on <code className="text-xs font-mono">size</code>, font size from 0.5&times; to 2&times; <Next />. Then letter-spacing, capped at &plusmn;0.3em, or &plusmn;0.05em when <code className="text-xs font-mono">size</code> is on. <code className="text-xs font-mono">prefer</code> can restrict it to the axis or to tracking alone.</p>
+						<p>The package&rsquo;s default stops at the axis and tracking: font size never changes unless you ask. We think font size is the better second step, because it leaves the designer&rsquo;s spacing and ligatures alone, and we recommend turning <code className="text-xs font-mono">size</code> on once it is released. It costs height, and it is not a superset of tracking: at its 0.5&times; floor it can overflow a box that &minus;0.3em of tracking would squeeze into.</p>
 					</div>
 					<div className="flex flex-col gap-3">
 						<p className="font-semibold text-base">It measures a hidden copy</p>
@@ -71,7 +72,7 @@ export default function Home() {
 					</div>
 					<div className="flex flex-col gap-3">
 						<p className="font-semibold text-base">It tells you when it can&rsquo;t</p>
-						<p>A fit is never wider than its target and at most <code className="text-xs font-mono">tolerance</code> (0.5 px) narrower. When the ranges you allow can&rsquo;t reach the target, the text is left short or overflowing, with a console warning. From the next release <code className="text-xs font-mono">applyFitWidth</code> also returns what each stage did, which is what the demo prints <Next />.</p>
+						<p>A fit is never wider than its target and at most <code className="text-xs font-mono">tolerance</code> (0.5 px) narrower. When the ranges you allow can&rsquo;t reach the target, the text is left short or overflowing; it isn&rsquo;t forced. An overflow prints one console warning per page; falling short prints nothing. From the next release <code className="text-xs font-mono">applyFitWidth</code> also returns what each stage did for every fit, which is what the demo prints <Next />.</p>
 					</div>
 				</div>
 				<div className="flex flex-col gap-3 text-sm leading-relaxed">
@@ -82,6 +83,7 @@ export default function Home() {
 						<li>Values outside a font&rsquo;s own <code className="text-xs font-mono">wdth</code> range are clamped by the browser, so searching 75&ndash;125 in a font that has 75&ndash;100 finds nothing above 100.</li>
 						<li>Any non-zero letter-spacing turns off a font&rsquo;s ligatures. If your headline has one (an &ldquo;fi&rdquo;, say), the width jumps when tracking starts, and a target inside that jump can&rsquo;t be reached by tracking.</li>
 						<li>At &minus;0.3em letters can collide. Lower <code className="text-xs font-mono">maxTracking</code> if a narrow box is possible.</li>
+						<li>In npm 1.1.0, a fit that adds tracking counts the space the browser puts after the last letter, so the last letter ends short of the edge by the tracking amount (or past it, with negative tracking): a median of 9 px off in our 21-font test, and up to 20 px. The repository fixes this, so the demo already shows the corrected behaviour <Next />.</li>
 						<li>The search assumes the axis widens the text as its value rises. An axis that doesn&rsquo;t (<code className="text-xs font-mono">opsz</code>) won&rsquo;t converge.</li>
 						<li><code className="text-xs font-mono">size</code> changes the element&rsquo;s height. Text that is scaled to fit is also a known way to fail WCAG 1.4.4 (Resize Text); the CSS Working Group is discussing a default 200% limit for that reason, and <code className="text-xs font-mono">size: true</code> stops at 2&times;.</li>
 					</ul>
