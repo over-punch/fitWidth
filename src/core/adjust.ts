@@ -548,7 +548,9 @@ export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): F
 				// space); it may have hit its cap; or the width may jump past the target between two
 				// neighbouring values (any letter-spacing turns a font's ligatures off).
 				const at = (em: number) => backend.measureText(text, { fontVariationSettings: fvs, letterSpacing: em * sizePx, fontSize: sized }).width
-				if (maxTracking > 0 && Math.abs(at(maxTracking) - at(-maxTracking)) < 0.05) {
+				// (Compared on the positive side only: a box can't go below zero width, so heavy negative
+				// spacing on one narrow letter would look like a change.)
+				if (maxTracking > 0 && Math.abs(at(maxTracking) - at(0)) < 0.05) {
 					limits.tracking = 'inert'
 					tracking = 0
 					finalGap = at(0) - targetWidth

@@ -193,9 +193,12 @@ function measureReach(probe: HTMLElement, range: [number, number], hasAxis: bool
 	return {
 		natural: width(null, fontSize, 0),
 		axis: [width(lo, fontSize, 0), width(hi, fontSize, 0)],
-		tracking: [width(lo, fontSize, -DEFAULT_TRACKING), width(hi, fontSize, DEFAULT_TRACKING)],
+		// One letter has no gaps, so spacing can't move it: keep the axis reach.
+		tracking: [...probe.textContent ?? ''].length > 1 ? [width(lo, fontSize, -DEFAULT_TRACKING), width(hi, fontSize, DEFAULT_TRACKING)] : [width(lo, fontSize, 0), width(hi, fontSize, 0)],
 		size: [width(lo, fontSize * SIZE_RANGE[0], -SIZED_TRACKING), width(hi, fontSize * SIZE_RANGE[1], SIZED_TRACKING)],
-		jump: Math.max(0, width(hi, fontSize, 0.0005) - width(hi, fontSize, 0)),
+		// The first step of spacing, minus what an equal second step adds: what is left is the jump
+		// from a ligature splitting (zero when the headline has none).
+		jump: Math.max(0, (width(hi, fontSize, 0.01) - width(hi, fontSize, 0)) - (width(hi, fontSize, 0.02) - width(hi, fontSize, 0.01))),
 	}
 }
 
@@ -699,13 +702,13 @@ export default function Demo() {
 							{/* Natural width tick */}
 							<div style={{ position: 'absolute', top: 0, bottom: 0, left: reach.natural, width: 0, borderLeft: '1px dashed var(--foreground)' }} />
 							{/* Box edge */}
-							<div style={{ position: 'absolute', top: 0, bottom: 0, left: Math.min(demoWidth - 6, boxPx), width: 3, background: 'var(--foreground)' }} />
+							<div style={{ position: 'absolute', top: 0, bottom: 0, left: Math.min(demoWidth - 4, boxPx), width: 2, background: 'var(--foreground)' }} />
 						</div>
 						<ul className="flex flex-col gap-1 text-xs text-muted">
 							<li>Top bar, <strong>wdth alone</strong>: {font.wdth
 								? <><span className="font-mono tabular-nums">{pct(reach.axis[0], reach.natural)}–{pct(reach.axis[1], reach.natural)}</span> of the width as set</>
 								: 'no bar, because this font has no wdth axis'}</li>
-							<li>Middle bar, wdth plus ±{DEFAULT_TRACKING}em tracking: <span className="font-mono tabular-nums">{pct(Math.max(0, reach.tracking[0]), reach.natural)}–{pct(reach.tracking[1], reach.natural)}</span>{reach.tracking[0] < reach.natural * 0.5 && ' (well before the low end, the letters overlap)'}{reach.tracking[1] > demoWidth && ' (runs past the ruler)'}{reach.jump > 0.5 && <>. <strong>Gap from {px(reach.axis[1])} to {px(reach.axis[1] + reach.jump)}:</strong> any letter-spacing splits a ligature in this headline, so tracking can’t land there</>}</li>
+							<li>Middle bar, wdth plus ±{DEFAULT_TRACKING}em tracking: <span className="font-mono tabular-nums">{pct(Math.max(0, reach.tracking[0]), reach.natural)}–{pct(reach.tracking[1], reach.natural)}</span>{reach.tracking[0] < reach.natural * 0.5 && ' (well before the low end, the letters overlap)'}{reach.tracking[1] > demoWidth && ' (runs past the ruler)'}{reach.jump > 0.3 && <>. <strong>Gap from {px(reach.axis[1])} to {px(reach.axis[1] + reach.jump)}:</strong> any letter-spacing splits a ligature in this headline, so tracking can’t land there</>}</li>
 							<li>Bottom bar, wdth plus font size {SIZE_RANGE[0]}–{SIZE_RANGE[1]}× and ±{SIZED_TRACKING}em tracking: <span className="font-mono tabular-nums">{pct(reach.size[0], reach.natural)}–{pct(reach.size[1], reach.natural)}</span>{reach.size[1] > demoWidth && ' (runs past the ruler)'}</li>
 							<li>Dashed line: the width as set{reach.natural > demoWidth && ' (past the ruler here)'}. Solid line: the box edge. Where the solid line misses a bar, that combination can’t reach the box.</li>
 						</ul>

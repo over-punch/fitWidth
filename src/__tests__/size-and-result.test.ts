@@ -33,8 +33,12 @@ function textWidth(el: HTMLElement, hasAxis = true): number {
 	const wdth = hasAxis ? Math.min(FONT_WDTH.max, Math.max(FONT_WDTH.min, raw)) : 100
 	// Any non-zero letter-spacing turns ligatures off: the mocked "fi" splits and the text jumps wider.
 	const split = spacingOf(el) !== 0 ? ligatureJump : 0
-	return 4 * wdth * (fontSizeOf(el) / 100) + LETTERS * spacingOf(el) + split
+	// A box can't be narrower than zero: heavy negative spacing on one narrow letter clamps there.
+	return Math.max(0, 4 * wdth * (fontSizeOf(el) / 100) * narrow + LETTERS * spacingOf(el) + split)
 }
+
+/** Width multiplier for the mocked glyphs; a test sets it low to mock a narrow letter such as "I". */
+let narrow = 1
 
 /** Extra width (px) the mocked text gains when a ligature splits; 0 for a font without one. */
 let ligatureJump = 0
@@ -63,7 +67,7 @@ function make(style = 'font-size: 100px') {
 
 let restore: (() => void) | null = null
 beforeEach(() => { document.body.innerHTML = ''; vi.spyOn(console, 'warn').mockImplementation(() => {}) })
-afterEach(() => { restore?.(); restore = null; ligatureJump = 0; LETTERS = 3; vi.restoreAllMocks() })
+afterEach(() => { restore?.(); restore = null; ligatureJump = 0; LETTERS = 3; narrow = 1; vi.restoreAllMocks() })
 
 describe('the result object', () => {
 	it('reports a fit the axis reached on its own', () => {
@@ -436,5 +440,20 @@ describe('a one-letter headline', () => {
 		expect(r.ratios.tracking).toBe(1)
 		expect(el.style.marginRight).toBe('')
 		expect(r.width).toBe(500)
+	})
+})
+
+describe('a narrow one-letter headline', () => {
+	it('is still reported as inert when negative spacing would clamp its box at zero', () => {
+		// "I": 25px wide at wdth 125. −0.3em is −30px, which clamps the box to 0 and looks like a change.
+		LETTERS = 1
+		narrow = 0.05
+		restore = mockLayout(900)
+		const { el } = make()
+		for (const prefer of ['auto', 'tracking'] as const) {
+			const r = applyFitWidth(el, { prefer }) as FitWidthResult
+			expect(r.limits.tracking).toBe('inert')
+			expect(r.tracking).toBe(0)
+		}
 	})
 })
