@@ -2,7 +2,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import '../../talk.css'
-import { FAMILIES, MEDIAN_REACH, GRID, GRID_TOTAL, OPSZ, CENSUS, WDTH_FAMILIES } from '../../../content/measurements'
+import { FAMILIES, MEDIAN_REACH, WIDENERS, GRID, GRID_TOTAL, DEFAULT_TRACKING, TRAILING, OPSZ, CENSUS, WDTH_FAMILIES } from '../../../content/measurements'
 import SiteFooter from '../../../components/SiteFooter'
 import { version } from '../../../../../package.json'
 import { version as siteVersion } from '../../../../package.json'
@@ -41,16 +41,16 @@ export default function DataPage() {
 					</h1>
 				</div>
 				<p className="text-base text-muted leading-relaxed max-w-xl">
-					The numbers behind the <Link href="/paper" className="underline underline-offset-2 hover:text-foreground">paper</Link> and the <Link href="/talk" className="underline underline-offset-2 hover:text-foreground">talk</Link>. Method is in the paper. Everything here was measured on 7 October 2026 with Chromium 149, uharfbuzz 0.56.1 and fonts from google/fonts at commit 7085eb8.
+					The numbers behind the <Link href="/paper" className="underline underline-offset-2 hover:text-foreground">paper</Link> and the <Link href="/talk" className="underline underline-offset-2 hover:text-foreground">talk</Link>. Method is in the paper. Everything here was measured on 7 October 2026 with Chromium 149, uharfbuzz 0.56.1, fonts from google/fonts at commit 7085eb8, and fitWidth built from its repository at commit 4aaaf917.
 				</p>
 			</header>
 
 			<section className="w-full max-w-2xl lg:max-w-5xl flex flex-col gap-4">
 				<h2 className="text-xs uppercase tracking-[0.18em] font-medium text-muted">1. Reach of wdth 75–125 in {FAMILIES.length} families</h2>
-				<p className="text-sm text-muted max-w-2xl">Width at wdth 75 and 125 (each clamped to the font&rsquo;s own range) as a share of the width at wdth 100. Mean of five strings at 72 px, weight 400. Median narrowest {pct(MEDIAN_REACH[0])}; median widest {pct(MEDIAN_REACH[1])}. {FAMILIES.filter(f => f.chrome[1] < 1.005).length} can&rsquo;t widen; {FAMILIES.filter(f => f.chrome[1] - f.chrome[0] < 0.3).length} span less than 30 points; {FAMILIES.filter(f => f.chrome[1] - f.chrome[0] < 0.2).length} less than 20.</p>
+				<p className="text-sm text-muted max-w-2xl">Width at wdth 75 and 125 (each clamped to the font&rsquo;s own range) as a share of the width at wdth 100. Mean of five strings at 72 px, weight 400. Median narrowest {pct(MEDIAN_REACH[0])}; median widest {pct(MEDIAN_REACH[1])} (two separate medians). Among the {WIDENERS.count} that can widen, the median widest is {pct(WIDENERS.median)}. The last two columns are the reach over each font&rsquo;s whole wdth range (HarfBuzz only). {FAMILIES.filter(f => f.chrome[1] < 1.005).length} can&rsquo;t widen; {FAMILIES.filter(f => f.chrome[1] - f.chrome[0] < 0.3).length} span less than 30 points; {FAMILIES.filter(f => f.chrome[1] - f.chrome[0] < 0.2).length} less than 20.</p>
 				<div className="overflow-x-auto">
 					<table className="w-full text-sm border-collapse">
-						<thead><tr>{['Family', 'Font’s wdth range', 'Optical size axis', 'Chromium: narrowest', 'Chromium: widest', 'HarfBuzz: narrowest', 'HarfBuzz: widest'].map(h => <th key={h} scope="col" className={TH}>{h}</th>)}</tr></thead>
+						<thead><tr>{['Family', 'Font’s wdth range', 'Optical size axis', 'Chromium: narrowest', 'Chromium: widest', 'HarfBuzz: narrowest', 'HarfBuzz: widest', 'Full range: narrowest', 'Full range: widest'].map(h => <th key={h} scope="col" className={TH}>{h}</th>)}</tr></thead>
 						<tbody>{FAMILIES.map(f => (
 							<tr key={f.name} className="odd:bg-foreground/[0.04]">
 								<td className="px-2 py-1.5">{f.name}</td>
@@ -60,6 +60,8 @@ export default function DataPage() {
 								<td className="px-2 py-1.5 tabular-nums">{pct(f.chrome[1])}</td>
 								<td className="px-2 py-1.5 tabular-nums text-muted">{pct(f.harfbuzz[0])}</td>
 								<td className="px-2 py-1.5 tabular-nums text-muted">{pct(f.harfbuzz[1])}</td>
+								<td className="px-2 py-1.5 tabular-nums text-muted">{pct(f.full[0])}</td>
+								<td className="px-2 py-1.5 tabular-nums text-muted">{pct(f.full[1])}</td>
 							</tr>
 						))}</tbody>
 					</table>
@@ -68,7 +70,7 @@ export default function DataPage() {
 
 			<section className="w-full max-w-2xl lg:max-w-5xl flex flex-col gap-4">
 				<h2 className="text-xs uppercase tracking-[0.18em] font-medium text-muted">2. The library on those {FAMILIES.length} fonts: {GRID_TOTAL.cases} fits</h2>
-				<p className="text-sm text-muted max-w-2xl">&ldquo;Headline fitting&rdquo; at 72 px. Each cell is how many of the {FAMILIES.length} fonts fitted the target (never wider, at most 0.5 px narrower). Totals: axis only {GRID_TOTAL.axis}, tracking only {GRID_TOTAL.tracking}, axis then tracking {GRID_TOTAL.auto}, axis then size then tracking {GRID_TOTAL.size}, each of {GRID_TOTAL.cases}. Without the 1.0× row the axis-only total is {GRID_TOTAL.axis - (GRID.find(r => r.ratio === 1)?.axis ?? 0)} of {GRID_TOTAL.cases - FAMILIES.length}. The targets end at 2×, which is also the size option&rsquo;s limit.</p>
+				<p className="text-sm text-muted max-w-2xl">&ldquo;Headline fitting&rdquo; at 72 px. Each cell is how many of the {FAMILIES.length} fonts fitted the target (never wider, at most 0.5 px narrower). Totals: axis only {GRID_TOTAL.axis}, tracking only {GRID_TOTAL.tracking}, axis then tracking {GRID_TOTAL.auto}, axis then size then tracking {GRID_TOTAL.size}, each of {GRID_TOTAL.cases}. Without the 1.0× row the axis-only total is {GRID_TOTAL.axis - (GRID.find(r => r.ratio === 1)?.axis ?? 0)} of {GRID_TOTAL.cases - FAMILIES.length}. The targets end at 2×, which is also the size option&rsquo;s limit. The first three columns are also what published 1.1.0 does (1,008 fits, identical styles); the last needs the unreleased <code className="font-mono">size</code> option. Of the default&rsquo;s {DEFAULT_TRACKING.fits} fits, {DEFAULT_TRACKING.over005} added more than 0.05em of tracking and {DEFAULT_TRACKING.over012} more than 0.12em (median {DEFAULT_TRACKING.medianEm}em). In the {TRAILING.cases} default fits that added tracking, the last letter ended from {Math.abs(TRAILING.min)} px short of the target to {TRAILING.max} px past it (median {TRAILING.median} px away); with <code className="font-mono">trimTrailingSpace</code>, {TRAILING.trimmedFits} of them still fit, {Math.abs(TRAILING.trimmedMax)} to {Math.abs(TRAILING.trimmedMin)} px inside.</p>
 				<div className="overflow-x-auto">
 					<table className="w-full text-sm border-collapse">
 						<thead><tr>{['Target ÷ natural width', 'Width axis only', 'Tracking only (±0.3em)', 'Axis, then tracking (default)', 'Axis, then size 0.5–2×, then ±0.05em'].map(h => <th key={h} scope="col" className={TH}>{h}</th>)}</tr></thead>
@@ -113,7 +115,7 @@ export default function DataPage() {
 
 			<section className="w-full max-w-2xl lg:max-w-5xl flex flex-col gap-4">
 				<h2 className="text-xs uppercase tracking-[0.18em] font-medium text-muted">4. Every Google Fonts family with a wdth axis</h2>
-				<p className="text-sm text-muted max-w-2xl">From fonts.google.com/metadata/fonts, fetched 7 October 2026, 10:44 UTC. {CENSUS.families.toLocaleString('en')} families; {CENSUS.variable} variable; {CENSUS.wdth} with a wdth axis. Of those {CENSUS.wdth}: {CENSUS.maxAt100} stop at 100 ({CENSUS.notoMaxAt100} of them Noto), {CENSUS.minAt100} start at 100, and {CENSUS.wdth - CENSUS.maxAt100 - CENSUS.minAt100} go both ways; {CENSUS.cover75to125} cover all of 75–125 and {CENSUS.exactly75to125} are exactly 75–125. Median span {CENSUS.medianSpan} units. Sorted by span.</p>
+				<p className="text-sm text-muted max-w-2xl">From fonts.google.com/metadata/fonts, fetched 7 October 2026, 10:44 UTC. {CENSUS.families.toLocaleString('en')} families; {CENSUS.variable} variable; {CENSUS.wdth} with a wdth axis ({CENSUS.noto} of them Noto and {CENSUS.anek} Anek, each one design released for many scripts). Of those {CENSUS.wdth}: {CENSUS.maxAt100} stop at 100 ({CENSUS.notoMaxAt100} of them Noto), {CENSUS.minAt100} start at 100, and {CENSUS.wdth - CENSUS.maxAt100 - CENSUS.minAt100} go both ways; {CENSUS.cover75to125} cover all of 75–125 and {CENSUS.exactly75to125} are exactly 75–125. Median span {CENSUS.medianSpan} units. Sorted by span.</p>
 				<div className="overflow-x-auto">
 					<table className="w-full max-w-2xl text-sm border-collapse">
 						<thead><tr>{['Family', 'Min', 'Max', 'Span'].map(h => <th key={h} scope="col" className={TH}>{h}</th>)}</tr></thead>

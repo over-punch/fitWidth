@@ -31,7 +31,7 @@ const FONTS: DemoFont[] = [
 	{ id: 'roboto-flex', label: 'Roboto Flex', name: 'Roboto Flex', opsz: true, family: "'Roboto Flex', sans-serif", wdth: [25, 151], note: 'A wide axis (25–151) that also has an optical-size axis, so its reach changes with font size.' },
 	{ id: 'roboto', label: 'Roboto', name: 'Roboto', family: "'FW Roboto', sans-serif", wdth: [75, 100], note: 'Narrows only (75–100): it has no width above normal.' },
 	{ id: 'merriweather', label: 'Merriweather', name: 'Merriweather', opsz: true, family: "'Merriweather', serif", wdth: [87, 112], note: 'A small range (87–112).' },
-	{ id: 'anybody', label: 'Anybody', name: 'Anybody', family: "'FW Anybody', sans-serif", wdth: [50, 150], note: 'Drawn for width (50–150): the exception. Its axis reaches further than most, and further still with “Font’s full range”.' },
+	{ id: 'anybody', label: 'Anybody', name: 'Anybody', family: "'FW Anybody', sans-serif", wdth: [50, 150], note: 'A long width range (50–150). Its axis reaches further than most, and further still with “Font’s full range”.' },
 	{ id: 'inter', label: 'Inter (no wdth axis)', name: 'Inter', family: 'var(--font-sans), sans-serif', wdth: null, note: 'No wdth axis: the axis step does nothing, and there is no range to search.' },
 ]
 
@@ -185,16 +185,16 @@ function measureReach(probe: HTMLElement, range: [number, number], hasAxis: bool
 		probe.style.fontVariationSettings = wdth === null ? '' : `"wdth" ${wdth}`
 		probe.style.fontSize = `${size}px`
 		probe.style.letterSpacing = spacingEm ? `${spacingEm}em` : ''
-		// As fitWidth does: the letter-spacing the browser adds after the last letter isn't text.
-		return probe.getBoundingClientRect().width - spacingEm * size
+		// The element's measured width, as fitWidth's default counts it (the browser's letter-spacing
+		// after the last letter included).
+		return probe.getBoundingClientRect().width
 	}
 	const lo = hasAxis ? range[0] : null
 	const hi = hasAxis ? range[1] : null
 	return {
 		natural: width(null, fontSize, 0),
 		axis: [width(lo, fontSize, 0), width(hi, fontSize, 0)],
-		// One letter has no gaps, so spacing can't move it: keep the axis reach.
-		tracking: [...probe.textContent ?? ''].length > 1 ? [width(lo, fontSize, -DEFAULT_TRACKING), width(hi, fontSize, DEFAULT_TRACKING)] : [width(lo, fontSize, 0), width(hi, fontSize, 0)],
+		tracking: [width(lo, fontSize, -DEFAULT_TRACKING), width(hi, fontSize, DEFAULT_TRACKING)],
 		size: [width(lo, fontSize * SIZE_RANGE[0], -SIZED_TRACKING), width(hi, fontSize * SIZE_RANGE[1], SIZED_TRACKING)],
 		// The first step of spacing, minus what an equal second step adds: what is left is the jump
 		// from a ligature splitting (zero when the headline has none).
@@ -275,6 +275,9 @@ function StrategyRow({ strategy, text, font, rangeMin, rangeMax, fontSize, boxPc
 		costs.push(`${r.tracking > 0 ? 'Letters spread apart' : 'Letters pushed together'} by ${em(Math.abs(r.tracking)).slice(1)} each: ${(Math.abs(r.tracking) / SIZED_TRACKING).toFixed(1)}× the ${SIZED_TRACKING}em the last row allows.${r.tracking < -0.1 ? ' At this much negative tracking the letters run into each other: it “fits” by width only.' : ''}`)
 	}
 	if (r && usesTracking && r.tracking !== 0 && r.limits.tracking !== 'stepped') costs.push('Any letter-spacing also turns off the font’s ligatures.')
+	// The browser adds letter-spacing after the last letter too, and the default fit counts it.
+	const trailing = r && !r.trimmed ? r.tracking * r.fontSize : 0
+	if (r && usesTracking && Math.abs(trailing) >= 0.5) costs.push(`The last letter ends ${px(Math.abs(trailing))} ${trailing > 0 ? 'before' : 'past'} that width, because the browser adds the spacing after it too.`)
 	if (r && usesSize && Math.abs(r.fontSize - fontSize) > 0.05) costs.push(r.fontSize > fontSize
 		? `The type is now ${+r.fontSize.toFixed(1)} px, not ${fontSize} px, so the line is taller: leave room for it.`
 		: `The type is now ${+r.fontSize.toFixed(1)} px, not the ${fontSize} px you set: smaller type, and less of the line’s height used.`)
@@ -369,7 +372,7 @@ function MeasuredStrip({ current }: { current: string }) {
 		<div className="flex flex-col gap-3" data-measured>
 			<h3 className="text-xs uppercase tracking-[0.18em] font-medium text-muted">The same reach in 21 font families</h3>
 			<p className="text-sm leading-relaxed">
-				How far wdth 75–125 moves a headline in 21 Google Fonts families that have the axis, as a share of its natural width. The median narrowest is <strong>80%</strong> and the median widest is <strong>113%</strong> (two separate medians: no single font has exactly that range). Six can’t widen at all. A few reach much further: those were drawn for width.
+				How far wdth 75–125 moves a headline in 21 Google Fonts families that have the axis, as a share of its natural width. Half of them can’t take it below <strong>80%</strong>, and half can’t take it past <strong>113%</strong> (two separate medians: no single font has exactly that range). Six can’t widen at all; the 15 that can reach a median of 119%. A few have a long width range and go much further.
 			</p>
 			<div role="img" aria-label={`Reach of wdth 75 to 125 in 21 families, from ${MEASURED.map(([n, lo, hi]) => `${n} ${Math.round(lo * 100)} to ${Math.round(hi * 100)} percent`).join('; ')}. Median 80 to 113 percent.`} className="flex flex-col gap-[3px]">
 				{MEASURED.map(([name, lo, hi]) => {
@@ -392,7 +395,7 @@ function MeasuredStrip({ current }: { current: string }) {
 				Scale: 50% to 150%. Dashed line: natural width (100%). Shaded band: the median, 80–113%. Each font was searched over 75–125 or as much of that as it has. Mean of five headline strings at 72 px, weight 400, measured in Chromium 149 on 7 October 2026; these 21 are a hand-picked sample of the 97 Google Fonts families with a wdth axis, and the sample is kinder to the axis than the whole set: 6 of these 21 can’t widen, against 49 of the 97. This chart is fixed data. The ruler above is live, so its numbers differ with your headline and size.
 			</p>
 			<p className="text-sm leading-relaxed" data-grid>
-				We also ran the library on these 21 fonts: one headline (“Headline fitting”, 72 px) and 16 target widths, from 0.5× to 2× its natural width in steps of 0.1×, which makes 336 fits. With <strong>wdth alone, 75 of the 336 fit</strong>. That count includes the 21 targets at exactly 1.0×, where nothing has to move: without them it is 54 of 315. Tracking alone (±{DEFAULT_TRACKING}em) fit 260, wdth then tracking 286, and wdth then font size then ±{SIZED_TRACKING}em fit all 336. Those shares describe this grid of targets, not headlines in general.
+				We also ran the library on these 21 fonts: one headline (“Headline fitting”, 72 px) and 16 target widths, from 0.5× to 2× its natural width in steps of 0.1×, which makes 336 targets. With <strong>wdth alone, 75 of the 336 fit</strong>. That count includes the 21 targets at exactly 1.0×, where nothing has to move: without them it is 54 of 315. Tracking alone (±{DEFAULT_TRACKING}em) fit 267, wdth then tracking 294, and wdth then font size then ±{SIZED_TRACKING}em fit all 336 (the targets stop at 2×, which is also where the size option stops). Those counts describe this grid of targets, not headlines in general.
 			</p>
 		</div>
 	)
@@ -741,7 +744,7 @@ export default function Demo() {
 
 			<p className="text-xs text-muted" style={{ lineHeight: "1.8" }}>
 				{font.opsz && `${font.name} has an optical-size axis that follows font size, so a 2× font size is not 2× the width (the “×” beside a font size is the change in width, not in size), and its wdth reach changes with size: drag “Font size you set” and watch the ruler. `}
-				Each “×” is how much that step changed the headline’s width; multiply them and you get the fitted width over the width as set. Widths here are the text’s measured (advance) width, with letter-spacing counted between letters only. In a fit that width is inside the box and at most half a pixel from its edge; the ink of the last letter can sit a few pixels either side of that, as it does in any text (an overhanging “f”, or the side bearing of an “M”). When every range a strategy may use has run out, the row says how far short (or over) it ended: fitWidth stops there and does not force the fit. (An overflow also prints a console warning, once for each combination of levers; falling short prints nothing.) No row always wins: the last one stops at half and double the size you set, so a very narrow box can still overflow it where ±{DEFAULT_TRACKING}em of tracking squeezes in. The numbers under each row come from the object <code className="font-mono">applyFitWidth</code> returns; this demo runs the code in the repository, which is ahead of npm 1.1.0.
+				Each “×” is how much that step changed the headline’s width; multiply them and you get the fitted width over the width as set. Widths here are the element’s measured (advance) width. In a fit that width is inside the box and at most half a pixel from its edge. Two things sit inside it: the letter-spacing a browser adds after the last letter (each row says how much), and the last letter’s own side bearing, as in any text. When every range a strategy may use has run out, the row says how far short (or over) it ended: fitWidth stops there and does not force the fit. (An overflow also prints a console warning, once for each combination of levers; falling short prints nothing.) No row always wins: the last one stops at half and double the size you set, so a very narrow box can still overflow it where ±{DEFAULT_TRACKING}em of tracking squeezes in. The numbers under each row come from the object <code className="font-mono">applyFitWidth</code> returns, which is new in the repository. The first three rows write the same styles npm 1.1.0 does (checked on 1,008 fits); the last row needs the unreleased <code className="font-mono">size</code> option.
 			</p>
 		</div>
 	)

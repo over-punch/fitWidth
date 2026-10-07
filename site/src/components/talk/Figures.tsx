@@ -21,7 +21,7 @@ function pos(share: number): string {
 export function ReachFigure() {
 	return (
 		<div className="fig rounded-xl p-6 lg:p-8" style={{ background: 'var(--panel)' }}>
-			<FigTitle>How far wdth 75–125 moves a headline: median {Math.round(MEDIAN_REACH[0] * 100)}% to {Math.round(MEDIAN_REACH[1] * 100)}%.</FigTitle>
+			<FigTitle>How far wdth 75–125 moves a headline: half stop by {Math.round(MEDIAN_REACH[0] * 100)}%, half by {Math.round(MEDIAN_REACH[1] * 100)}%.</FigTitle>
 			<div className="flex flex-col gap-1.5" role="img" aria-label={FAMILIES.map(f => `${f.name} ${Math.round(f.chrome[0] * 100)} to ${Math.round(f.chrome[1] * 100)} percent`).join('; ')}>
 				{FAMILIES.map((f, i) => (
 					<div key={f.name} className="grid grid-cols-[7.5rem_minmax(0,1fr)_4.5rem] sm:grid-cols-[10rem_minmax(0,1fr)_5rem] gap-3 items-center">
@@ -35,7 +35,7 @@ export function ReachFigure() {
 					</div>
 				))}
 			</div>
-			<Caption>Scale 50% to 150% of the width at wdth 100; the dashed line is 100% and the shaded band is the median. Mean of five strings at 72 px, weight 400, Chromium 149, fonts from google/fonts at commit 7085eb8, 7 October 2026.</Caption>
+			<Caption>Scale 50% to 150% of the width at wdth 100; the dashed line is 100% and the shaded band runs between the two medians. Mean of five strings at 72 px, weight 400, Chromium 149, fonts from google/fonts at commit 7085eb8, 7 October 2026.</Caption>
 		</div>
 	)
 }
@@ -84,7 +84,7 @@ export function GridFigure() {
 					</div>
 				))}
 			</div>
-			<Caption>“Headline fitting” at 72 px in each of the 21 fonts, targets from 0.5× to 2× natural width in steps of 0.1×. fitWidth built from its repository (ahead of npm 1.1.0), Chromium 149. A fit is never wider than the target and at most 0.5 px narrower.</Caption>
+			<Caption>“Headline fitting” at 72 px in each of the 21 fonts, targets from 0.5× to 2× natural width in steps of 0.1×. fitWidth built from its repository, Chromium 149; the first three rows write the same styles as npm 1.1.0, and the last needs the unreleased size option. A fit is never wider than the target and at most 0.5 px narrower.</Caption>
 		</div>
 	)
 }
