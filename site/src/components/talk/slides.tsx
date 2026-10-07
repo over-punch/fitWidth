@@ -247,7 +247,7 @@ export const SLIDES: Slide[] = [
 				<div>
 					<GridBar label="Width axis only" note="wdth 75–125" count={GRID_TOTAL.axis} on={step >= 1} strong />
 					<GridBar label="Axis, then tracking" note="the default today, up to ±0.3em" count={GRID_TOTAL.auto} on={step >= 2} />
-					<GridBar label="Axis, then font size" note="0.5× to 2×; not released yet" count={GRID_TOTAL.size} on={step >= 3} />
+					<GridBar label="Axis, then font size" note="0.5× to 2×; opt-in, new in 1.2.0" count={GRID_TOTAL.size} on={step >= 3} />
 				</div>
 			</Frame>
 		),
@@ -265,7 +265,7 @@ export const SLIDES: Slide[] = [
 				</h2>
 				<div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
 					<div className="vfd-rise" style={rise(320)}><Render src="/talk/row-auto.png" height={ROW_H.auto} alt="The word Typography fitted with letter-spacing: wide gaps between the letters." label="Axis, then tracking: the default." detail="wdth 125, then +0.2em after every letter." /></div>
-					<Reveal at={1} step={step}><Render src="/talk/row-size.png" height={ROW_H.size} alt="The word Typography fitted by font size: normal spacing, larger letters." label="Axis, then font size: not released." detail="wdth 125, then 90.7 px. No added spacing." /></Reveal>
+					<Reveal at={1} step={step}><Render src="/talk/row-size.png" height={ROW_H.size} alt="The word Typography fitted by font size: normal spacing, larger letters." label="Axis, then font size: opt-in." detail="wdth 125, then 90.7 px. No added spacing." /></Reveal>
 				</div>
 			</div>
 		),
@@ -279,13 +279,13 @@ export const SLIDES: Slide[] = [
 				<Title a="The last letter" b="misses the edge." />
 				<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }}>
 					<Card style={{ minHeight: 320 }}>
-						<p style={{ fontSize: 32, color: 'var(--t-muted)' }}>The default, and npm 1.1.0</p>
+						<p style={{ fontSize: 32, color: 'var(--t-muted)' }}>The default, in 1.1.0 and 1.2.0</p>
 						<p style={display(120)}><CountUp to={TRAILING.median} decimals={1} /> px</p>
 						<Body size={30}>Median gap between the last letter and the edge, in {TRAILING.cases} tracked fits.</Body>
 					</Card>
 					<Reveal at={1} step={step} style={{ height: '100%' }}>
 						<Card style={{ height: '100%', minHeight: 320 }}>
-							<p style={{ fontSize: 32, color: 'var(--t-muted)' }}>With the new option, not released</p>
+							<p style={{ fontSize: 32, color: 'var(--t-muted)' }}>With the new opt-in option</p>
 							<p style={display(120)}>0–<CountUp to={0.5} decimals={1} run={step >= 1} /> px</p>
 							<Body size={30}>Spacing counted between letters only.</Body>
 						</Card>
@@ -305,7 +305,7 @@ export const SLIDES: Slide[] = [
 				<p style={display(72)}><A href="https://fitwidth.com/#demo">fitwidth.com</A></p>
 			</Frame>
 		),
-		footer: <>The first three rows are what npm 1.1.0 does; the fourth needs the unreleased size option</>,
+		footer: <>The first three rows are what fitWidth does by default; the fourth uses the opt-in size option, new in 1.2.0</>,
 	},
 	{
 		id: 'order', tool: 'textBreath', steps: 3,
@@ -321,7 +321,7 @@ export const SLIDES: Slide[] = [
 				<p style={{ fontFamily: MONO, fontSize: 34 }}>applyFitWidth(el, {'{'} size: true {'}'})</p>
 			</Frame>
 		),
-		footer: <>In the repository and the demo · not the default, and not on npm yet</>,
+		footer: <>In fitWidth 1.2.0 · opt-in, not the default</>,
 	},
 	{
 		id: 'limits', tool: 'typsettle', steps: 2,

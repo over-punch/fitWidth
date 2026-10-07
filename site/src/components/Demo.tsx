@@ -94,8 +94,8 @@ interface Strategy {
 	allows: string
 	/** Options passed to applyFitWidth (the axis range is added per font) */
 	options: FitWidthOptions
-	/** True for the strategy that needs the unreleased `size` option */
-	next?: boolean
+	/** True for the strategy that uses the opt-in `size` option (new in 1.2.0, not the default) */
+	optIn?: boolean
 }
 
 /** The four strategies, in the order they are shown. */
@@ -103,7 +103,7 @@ const STRATEGIES: Strategy[] = [
 	{ id: 'axis', label: 'Width axis only', code: "prefer: 'axis'", allows: 'May change: wdth.', options: { prefer: 'axis' } },
 	{ id: 'tracking', label: 'Tracking only', code: "prefer: 'tracking'", allows: `May change: letter-spacing, up to ±${DEFAULT_TRACKING}em.`, options: { prefer: 'tracking' } },
 	{ id: 'auto', label: 'Width axis, then tracking', code: "prefer: 'auto' (what the package does by default)", allows: `May change: wdth first, then letter-spacing up to ±${DEFAULT_TRACKING}em.`, options: { prefer: 'auto' } },
-	{ id: 'size', label: 'Width axis, then font size, then a little tracking', code: 'size: true', allows: `May change: wdth first, then font size from ${SIZE_RANGE[0]}× to ${SIZE_RANGE[1]}×, then letter-spacing up to ±${SIZED_TRACKING}em. This is the order we recommend. It is not the default, and it is not on npm yet.`, options: { prefer: 'auto', size: true }, next: true },
+	{ id: 'size', label: 'Width axis, then font size, then a little tracking', code: 'size: true', allows: `May change: wdth first, then font size from ${SIZE_RANGE[0]}× to ${SIZE_RANGE[1]}×, then letter-spacing up to ±${SIZED_TRACKING}em. This is the order we recommend. It is opt-in: the default never changes font size.`, options: { prefer: 'auto', size: true }, optIn: true },
 ]
 
 /** Widths (px) the levers can reach for the current headline, measured in this browser. */
@@ -289,7 +289,7 @@ function StrategyRow({ strategy, text, font, rangeMin, rangeMax, fontSize, boxPc
 			<div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
 				<h3 className="text-sm font-semibold">{strategy.label}</h3>
 				<code className="text-xs font-mono text-muted">{strategy.code}</code>
-				{strategy.next && <span className="text-[0.65rem] uppercase tracking-[0.18em] text-muted border rounded-full px-2 py-0.5" style={{ borderColor: 'currentColor' }}>recommended · next release, not on npm yet</span>}
+				{strategy.optIn && <span className="text-[0.65rem] uppercase tracking-[0.18em] text-muted border rounded-full px-2 py-0.5" style={{ borderColor: 'currentColor' }}>recommended · opt-in, new in 1.2.0</span>}
 			</div>
 			<p className="text-xs text-muted">{strategy.allows}</p>
 			{/* The box. Its right edge is the target; overflow is left visible on purpose. */}
@@ -744,7 +744,7 @@ export default function Demo() {
 
 			<p className="text-xs text-muted" style={{ lineHeight: "1.8" }}>
 				{font.opsz && `${font.name} has an optical-size axis that follows font size, so a 2× font size is not 2× the width (the “×” beside a font size is the change in width, not in size), and its wdth reach changes with size: drag “Font size you set” and watch the ruler. `}
-				Each “×” is how much that step changed the headline’s width; multiply them and you get the fitted width over the width as set. Widths here are the element’s measured (advance) width. In a fit that width is inside the box and at most half a pixel from its edge. Two things sit inside it: the letter-spacing a browser adds after the last letter (each row says how much), and the last letter’s own side bearing, as in any text. When every range a strategy may use has run out, the row says how far short (or over) it ended: fitWidth stops there and does not force the fit. (An overflow also prints a console warning, once for each combination of levers; falling short prints nothing.) No row always wins: the last one stops at half and double the size you set, so a very narrow box can still overflow it where ±{DEFAULT_TRACKING}em of tracking squeezes in. The numbers under each row come from the object <code className="font-mono">applyFitWidth</code> returns, which is new in the repository. The first three rows write the same styles npm 1.1.0 does (checked on 1,008 fits); the last row needs the unreleased <code className="font-mono">size</code> option.
+				Each “×” is how much that step changed the headline’s width; multiply them and you get the fitted width over the width as set. Widths here are the element’s measured (advance) width. In a fit that width is inside the box and at most half a pixel from its edge. Two things sit inside it: the letter-spacing a browser adds after the last letter (each row says how much), and the last letter’s own side bearing, as in any text. When every range a strategy may use has run out, the row says how far short (or over) it ended: fitWidth stops there and does not force the fit. (An overflow also prints a console warning, once for each combination of levers; falling short prints nothing.) No row always wins: the last one stops at half and double the size you set, so a very narrow box can still overflow it where ±{DEFAULT_TRACKING}em of tracking squeezes in. The numbers under each row come from the object <code className="font-mono">applyFitWidth</code> returns, new in 1.2.0. The first three rows write the same styles 1.1.0 did (checked on 1,008 fits); the last row uses the <code className="font-mono">size</code> option, also new in 1.2.0 and off by default.
 			</p>
 		</div>
 	)

@@ -84,7 +84,7 @@ export function GridFigure() {
 					</div>
 				))}
 			</div>
-			<Caption>“Headline fitting” at 72 px in each of the 21 fonts, targets from 0.5× to 2× natural width in steps of 0.1×. fitWidth built from its repository, Chromium 149; the first three rows write the same styles as npm 1.1.0, and the last needs the unreleased size option. A fit is never wider than the target and at most 0.5 px narrower.</Caption>
+			<Caption>“Headline fitting” at 72 px in each of the 21 fonts, targets from 0.5× to 2× natural width in steps of 0.1×. Published fitWidth 1.2.0, Chromium 149; the first three rows write the same styles as 1.1.0, and the last uses the opt-in size option. A fit is never wider than the target and at most 0.5 px narrower.</Caption>
 		</div>
 	)
 }

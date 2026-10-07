@@ -6,7 +6,7 @@ export const PAPER_MD = `
 
 A variable font's width axis looks like the right tool for fitting a headline to its box. This paper counts how many open fonts have one, measures how far it moves a headline in 21 of them, and tests our own fitting library on those fonts. In the fonts we measured, the axis is a modest adjustment, and something else does most of the fitting.
 
-*Disclosure: the author makes [fitWidth](https://fitwidth.com) and other type tools for the web at Overpunch, which has built websites for type foundries for over fifteen years and is building [Typetin](https://typetin.com), a storefront platform for independent foundries (in development, not yet launched). The measurements use open tools (HarfBuzz, fontTools, Chromium) and open fonts. Our first recommendation doesn't need our library, and the order we argue for is not yet in its npm release.*
+*Disclosure: the author makes [fitWidth](https://fitwidth.com) and other type tools for the web at Overpunch, which has built websites for type foundries for over fifteen years and is building [Typetin](https://typetin.com), a storefront platform for independent foundries (in development, not yet launched). The measurements use open tools (HarfBuzz, fontTools, Chromium) and open fonts. Our first recommendation doesn't need our library, and the order we argue for is an option in it, not its default.*
 
 ## Summary
 
@@ -18,7 +18,7 @@ We then asked fitWidth to fit one headline in each of the 21 fonts to 16 target 
 
 So when a box is further away than the axis can reach, something else is doing the fitting. In fitWidth's released default that is letter-spacing (tracking). We now think it should be font size, with tracking held to a small cap.
 
-**What is released.** fitWidth 1.1.0 is on npm. The font-size step (\`size\`), the returned result and an option described below (\`trimTrailingSpace\`) are in the repository and run on fitwidth.com; they are not on npm yet, and \`size\` is off by default. Wherever a number below comes from the unreleased build, it says so.
+**What is released.** fitWidth 1.2.0 is on npm. It adds the font-size step (\`size\`), the returned result and an option described below (\`trimTrailingSpace\`). All three are opt-in or additive: the defaults are the same as 1.1.0, and \`size\` is off unless you turn it on. Every library number below was measured on the published 1.2.0 package.
 
 ## The idea, and who had it first
 
@@ -101,9 +101,9 @@ fitWidth searches the width axis first, at the font size you set, then closes wh
 | Width axis only | 75 | 54 |
 | Tracking only, ±0.3em | 267 | 246 |
 | Axis, then tracking (the default) | 294 | 273 |
-| Axis, then font size 0.5–2×, then tracking ±0.05em (not released) | 336 | 315 |
+| Axis, then font size 0.5–2×, then tracking ±0.05em (opt-in) | 336 | 315 |
 
-The first three rows are also what published 1.1.0 does: across those 1,008 fits the repository build and 1.1.0 wrote identical styles. The last row needs the unreleased \`size\` option.
+The first three rows are the same in 1.1.0: across those 1,008 fits, published 1.2.0 and 1.1.0 wrote identical styles. The last row uses the \`size\` option, new in 1.2.0.
 
 Read the table with care. The counts describe this grid of targets, not headlines in general; nothing here says what boxes real layouts ask for. The targets run from 0.5× to 2×, and the size option also runs from 0.5× to 2×, so the last row fits everything by construction. A library that only scales the font, with no limit, would fill every one of these boxes too. What the axis buys in the last row is the 75 cases (54 of them non-trivial) where the size you set didn't have to change.
 
@@ -123,7 +123,7 @@ Three costs showed up in testing.
 
 **Ligatures switch off.** The CSS Text specification says browsers "should not apply optional ligatures" when letter-spacing is not zero, and Chromium doesn't. In Advent Pro, "Headline fitting" at 72 px is 402.3 px wide at \`wdth\` 125. Add any spacing and its "tt" and "fi" ligatures split (8.5 px and 1.4 px), and the line jumps to 414.0 px. No tracking value lands on a target between the two. In 15 of the 21 fonts this headline's jump is about half a pixel or less; in Georama and Advent Pro it is over 10 px.
 
-**The last letter misses the edge.** Chromium adds letter-spacing after the last letter as well as between letters, and fitWidth counts that trailing space as part of the width. So a tracked fit ends with its last letter short of the edge by the tracking amount, or past it when the tracking is negative. In the 219 default fits above that added tracking, the last letter ended between 21.9 px short and 12.7 px past the target, a median of 8.5 px away. Penney's README noted the trailing space in 2018. We tried cancelling it by default and a review of that build showed it breaks ordinary layouts (a heading with \`width: 100%\` wraps), so it is an opt-in, \`trimTrailingSpace\`, for elements that size themselves to their text. With it, 211 of those 219 still fit and end 0 to 0.5 px inside the target; the other 8 reach the tracking cap sooner. It is not released.
+**The last letter misses the edge.** Chromium adds letter-spacing after the last letter as well as between letters, and fitWidth counts that trailing space as part of the width. So a tracked fit ends with its last letter short of the edge by the tracking amount, or past it when the tracking is negative. In the 219 default fits above that added tracking, the last letter ended between 21.9 px short and 12.7 px past the target, a median of 8.5 px away. Penney's README noted the trailing space in 2018. We tried cancelling it by default and a review of that build showed it breaks ordinary layouts (a heading with \`width: 100%\` wraps), so it is an opt-in, \`trimTrailingSpace\`, for elements that size themselves to their text. With it, 211 of those 219 still fit and end 0 to 0.5 px inside the target; the other 8 reach the tracking cap sooner. It is new in 1.2.0.
 
 **Negative tracking collides.** A narrow box makes the default fit with negative tracking. In the demo's opening font, by about −0.24em the letters overlap. The width matches and the word can't be read.
 
@@ -157,7 +157,7 @@ That scales with the container, not with the length of the text, so it doesn't l
 4. **Let font size take over when the axis runs out**, within limits you set.
 5. **Keep letter-spacing small**: none for lowercase if you can. Capitals can take more, and take it better than lowercase does.
 
-Steps 3 to 5 are what fitWidth's unreleased \`size\` option does:
+Steps 3 to 5 are what fitWidth's \`size\` option does (1.2.0, opt-in):
 
 \`\`\`
 applyFitWidth(el, { size: true })
@@ -175,7 +175,7 @@ It also returns what each step did (the axis value, the font size, the tracking,
 - **Scaled text and accessibility.** Text sized to its container may not grow when a reader zooms, which can fail WCAG 1.4.4, Resize Text. Komarov has proposed that CSS default to "a default limit equal to 200% of the original font-size"; the Chrome team has said it is not sure that limit works well. \`size: true\` stops at 2×, and we have not tested fitted headlines under zoom.
 - **The search range is a choice.** 75–125 is fitWidth's default, not a property of fonts. Roboto Flex reaches 83–120% over it and 49–140% over its full 25–151. The library doesn't read a font's own range, so you pass it. At the ends of a full range the letters look like a different typeface, so use them by choice.
 - **The search assumes width rises with \`wdth\`.** In Mona Sans, "illicit" gets narrower above 100 (150.4 px at 100, 146.8 px at 125, at 72 px), and the axis step ends on the wrong side.
-- **Nothing forces a fit.** Past its ranges the library stops and leaves the text short or overflowing. An overflow prints a console warning; the unreleased result object reports both.
+- **Nothing forces a fit.** Past its ranges the library stops and leaves the text short or overflowing. An overflow prints a console warning; the result object (1.2.0) reports both.
 - **Latin, one line.** Letter-spacing breaks joined scripts, and we tested Latin only. fitWidth fits a single line, needs the font loaded first, and measures a hidden copy about 20 times per step.
 - **"Fits" is about the advance box.** The ink sits a few pixels inside it, depending on the first and last letters' sidebearings.
 
@@ -209,7 +209,7 @@ It also returns what each step did (the axis value, the font size, the tracking,
 - **Census.** \`fonts.google.com/metadata/fonts\`, fetched 7 October 2026, 10:44 UTC. A family counts as having a width axis when its metadata lists a \`wdth\` axis.
 - **Fonts.** 21 upright variable TTFs from \`google/fonts\` at commit \`7085eb8\` (5 October 2026): Advent Pro, Anek Latin, Anybody, Archivo, Asap, Bricolage Grotesque, Encode Sans, Georama, IBM Plex Sans, Inconsolata, League Gothic, Merriweather, Mona Sans, Noto Sans, Nunito Sans, Open Sans, Roboto, Roboto Flex, Roboto Serif, Saira, Science Gothic.
 - **Reach.** Five strings ("THE WIDTH AXIS", "Headline fitting", "Hamburgefonstiv", "Breaking News: Markets Rally", "MINIMUM") at \`wdth\` 75, 100 and 125, each clamped to the font's range; weight 400; 72 px with optical size automatic. Reach is the mean over the five strings of advance width ÷ advance width at \`wdth\` 100. \`wdth\` 100 is what CSS asks for by default; it is not the default instance in Encode Sans or Georama. Measured with HarfBuzz (uharfbuzz 0.56.1) and in Chromium 149.0.7827.55 (\`getBoundingClientRect\`), which agreed within 0.10%. Full-range reaches, weight 700 and the glyph measurements are HarfBuzz and fontTools only.
-- **Library.** fitWidth built from its repository at commit \`4aaaf917\` (the 1.2.0 candidate), and published 1.1.0 from npm (checksum verified), both loaded in Chromium 149. Fits: "Headline fitting", 72 px, targets = natural width × 0.5, 0.6 … 2.0. A fit is a measured width no wider than the target and at most 0.5 px narrower.
+- **Library.** Published fitWidth 1.2.0 and 1.1.0 from npm (checksums verified against the registry), both loaded in Chromium 149. The Webflow bundle on jsDelivr and the module the Framer component imports gave the same fits as the npm package in a spot check on Roboto Flex. Fits: "Headline fitting", 72 px, targets = natural width × 0.5, 0.6 … 2.0. A fit is a measured width no wider than the target and at most 0.5 px narrower.
 - **Not measured.** Safari, Firefox, retail fonts, italics, non-Latin text, zoom, and readers.
 
 The tables are on the [data page](/paper/data). The scripts and their outputs are available on request.

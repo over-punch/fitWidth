@@ -19,11 +19,6 @@ const jsonLd = {
 	offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
 }
 
-/** Small tag for options that are in the repository but not in the npm release yet. */
-function Next() {
-	return <span className="text-[0.65rem] uppercase tracking-[0.18em] text-muted border rounded-full px-2 py-0.5 whitespace-nowrap" style={{ borderColor: 'currentColor' }}>next release</span>
-}
-
 export default function Home() {
 	return (
 		<main className="flex flex-col items-center px-6 py-20 gap-24">
@@ -66,8 +61,8 @@ export default function Home() {
 					</div>
 					<div className="flex flex-col gap-3">
 						<p className="font-semibold text-base">Three levers, in a fixed order</p>
-						<p>First the axis, at the font size you set (default search range 75&ndash;125). Then, only if you turn on <code className="text-xs font-mono">size</code>, font size from 0.5&times; to 2&times; <Next />. Then letter-spacing, capped at &plusmn;0.3em, or &plusmn;0.05em when <code className="text-xs font-mono">size</code> is on. <code className="text-xs font-mono">prefer</code> can restrict it to the axis or to tracking alone.</p>
-						<p>The package&rsquo;s default stops at the axis and tracking: font size never changes unless you ask. We think font size is the better second step, because it doesn&rsquo;t override the designer&rsquo;s spacing or switch off ligatures, and we recommend turning <code className="text-xs font-mono">size</code> on once it is released. It costs height, and it is not a superset of tracking: at its 0.5&times; floor it can overflow a box that &minus;0.3em of tracking would squeeze into.</p>
+						<p>First the axis, at the font size you set (default search range 75&ndash;125). Then, only if you turn on <code className="text-xs font-mono">size</code>, font size from 0.5&times; to 2&times; (new in 1.2.0). Then letter-spacing, capped at &plusmn;0.3em, or &plusmn;0.05em when <code className="text-xs font-mono">size</code> is on. <code className="text-xs font-mono">prefer</code> can restrict it to the axis or to tracking alone.</p>
+						<p>The package&rsquo;s default stops at the axis and tracking: font size never changes unless you ask. We think font size is the better second step, because it doesn&rsquo;t override the designer&rsquo;s spacing or switch off ligatures, and we recommend turning <code className="text-xs font-mono">size</code> on. It costs height, and it is not a superset of tracking: at its 0.5&times; floor it can overflow a box that &minus;0.3em of tracking would squeeze into.</p>
 					</div>
 					<div className="flex flex-col gap-3">
 						<p className="font-semibold text-base">It measures a hidden copy</p>
@@ -75,7 +70,7 @@ export default function Home() {
 					</div>
 					<div className="flex flex-col gap-3">
 						<p className="font-semibold text-base">It tells you when it can&rsquo;t</p>
-						<p>A fit&rsquo;s measured (advance) width is never wider than its target and at most <code className="text-xs font-mono">tolerance</code> (0.5 px) narrower; a letter&rsquo;s ink can overhang that by a few pixels, as in any text. When the ranges you allow can&rsquo;t reach the target, the text is left short or overflowing; it isn&rsquo;t forced. An overflow prints a console warning, once for each combination of levers; falling short prints nothing. From the next release <code className="text-xs font-mono">applyFitWidth</code> also returns what each stage did for every fit, which is what the demo prints <Next />.</p>
+						<p>A fit&rsquo;s measured (advance) width is never wider than its target and at most <code className="text-xs font-mono">tolerance</code> (0.5 px) narrower; a letter&rsquo;s ink can overhang that by a few pixels, as in any text. When the ranges you allow can&rsquo;t reach the target, the text is left short or overflowing; it isn&rsquo;t forced. An overflow prints a console warning, once for each combination of levers; falling short prints nothing. Since 1.2.0 <code className="text-xs font-mono">applyFitWidth</code> also returns what each stage did for every fit, which is what the demo prints.</p>
 					</div>
 				</div>
 				<div className="flex flex-col gap-3 text-sm leading-relaxed">
@@ -86,7 +81,7 @@ export default function Home() {
 						<li>Values outside a font&rsquo;s own <code className="text-xs font-mono">wdth</code> range are clamped by the browser, so searching 75&ndash;125 in a font that has 75&ndash;100 finds nothing above 100.</li>
 						<li>Any non-zero letter-spacing turns off a font&rsquo;s ligatures. If your headline has one (an &ldquo;fi&rdquo;, say), the width jumps when tracking starts, and a target inside that jump can&rsquo;t be reached by tracking.</li>
 						<li>At &minus;0.3em letters can collide. Lower <code className="text-xs font-mono">maxTracking</code> if a narrow box is possible.</li>
-						<li>Browsers add letter-spacing after the last letter as well as between letters, and the fit counts that space. So a tracked fit&rsquo;s last letter ends short of the edge by the tracking amount (or past it, with negative tracking): a median of 8.5 px in our 21-font test, and up to 22 px. An opt-in, <code className="text-xs font-mono">trimTrailingSpace</code>, counts spacing between letters only and cancels the trailing space with a margin. It only applies to elements that size themselves to their text, such as <code className="text-xs font-mono">display: inline-block</code> <Next />.</li>
+						<li>Browsers add letter-spacing after the last letter as well as between letters, and the fit counts that space. So a tracked fit&rsquo;s last letter ends short of the edge by the tracking amount (or past it, with negative tracking): a median of 8.5 px in our 21-font test, and up to 22 px. An opt-in, <code className="text-xs font-mono">trimTrailingSpace</code>, counts spacing between letters only and cancels the trailing space with a margin. It only applies to elements that size themselves to their text, such as <code className="text-xs font-mono">display: inline-block</code> (new in 1.2.0).</li>
 						<li>The search assumes the axis widens the text as its value rises. An axis that doesn&rsquo;t (<code className="text-xs font-mono">opsz</code>) won&rsquo;t converge, and a few fonts break the rule for some letters: in Mona Sans, &ldquo;illicit&rdquo; gets narrower above <code className="text-xs font-mono">wdth</code> 100.</li>
 						<li>Width also changes stroke weight and proportion in most families. Headlines seen together at very different widths can read as different fonts: keep a set within about one width class.</li>
 						<li><code className="text-xs font-mono">size</code> changes the element&rsquo;s height. Text that is scaled to fit is also a known way to fail WCAG 1.4.4 (Resize Text); the CSS Working Group is discussing a default 200% limit for that reason, and <code className="text-xs font-mono">size: true</code> stops at 2&times;.</li>
@@ -135,8 +130,8 @@ applyFitWidth(el)
 removeFitWidth(el)`} />
 					</div>
 					<div className="flex flex-col gap-3">
-						<p className="text-muted flex flex-wrap items-center gap-2">Let font size take over, and read what the fit did <Next /></p>
-						<CodeBlock code={`// In the repository now; not in the npm release (1.1.0) yet.
+						<p className="text-muted">Let font size take over, and read what the fit did (1.2.0)</p>
+						<CodeBlock code={`// Since 1.2.0. size is opt-in: without it, font size is never changed.
 const result = applyFitWidth(el, { size: true })
 
 result.status   // 'fit' | 'short' | 'overflow'
@@ -159,11 +154,11 @@ result.limits   // { axis: 'max', size: null, tracking: null }`} />
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">axis</td><td className="py-2 pr-6">&apos;wdth&apos;</td><td className="py-2">Variable font axis tag to search. It must widen the text as its value rises.</td></tr>
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">axisMin</td><td className="py-2 pr-6">75</td><td className="py-2">Lowest axis value searched. Set it to your font&apos;s own minimum if that is higher.</td></tr>
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">axisMax</td><td className="py-2 pr-6">125</td><td className="py-2">Highest axis value searched. Set it to your font&apos;s own maximum if that is lower.</td></tr>
-								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">maxTracking</td><td className="py-2 pr-6">0.3</td><td className="py-2">Most letter-spacing the fit may add or remove, in em, on top of your own. Next release: 0.05 when <code className="font-mono">size</code> is on.</td></tr>
+								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">maxTracking</td><td className="py-2 pr-6">0.3</td><td className="py-2">Most letter-spacing the fit may add or remove, in em, on top of your own. 0.05 when <code className="font-mono">size</code> is on.</td></tr>
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">tolerance</td><td className="py-2 pr-6">0.5</td><td className="py-2">How many px narrower than the target a fit may be. It is never wider.</td></tr>
-								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">size</td><td className="py-2 pr-6">false</td><td className="py-2">Next release. <code className="font-mono">true</code> lets font size go from 0.5&times; to 2&times; when the axis runs out; <code className="font-mono">{'{ min, max }'}</code> sets your own multipliers.</td></tr>
-								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">trimTrailingSpace</td><td className="py-2 pr-6">false</td><td className="py-2">Next release. Counts letter-spacing between letters only, so a tracked fit&apos;s last letter lands on the target. Applies to elements that size themselves to their text; ignored with a warning elsewhere.</td></tr>
-								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">onFit</td><td className="py-2 pr-6">none</td><td className="py-2">Next release. Called after each fit with the result: widths, the value each stage ended on, and whether the text fits.</td></tr>
+								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">size</td><td className="py-2 pr-6">false</td><td className="py-2">Since 1.2.0; off by default. <code className="font-mono">true</code> lets font size go from 0.5&times; to 2&times; when the axis runs out; <code className="font-mono">{'{ min, max }'}</code> sets your own multipliers.</td></tr>
+								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">trimTrailingSpace</td><td className="py-2 pr-6">false</td><td className="py-2">Since 1.2.0. Counts letter-spacing between letters only, so a tracked fit&apos;s last letter lands on the target. Applies to elements that size themselves to their text; ignored with a warning elsewhere.</td></tr>
+								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">onFit</td><td className="py-2 pr-6">none</td><td className="py-2">Since 1.2.0. Called after each fit with the result: widths, the value each stage ended on, and whether the text fits.</td></tr>
 								<tr className="hover:bg-foreground/5 transition-colors"><td className="py-2 pr-6 font-mono">respectReducedMotion</td><td className="py-2 pr-6">false</td><td className="py-2">When true, skips fitting if the user has enabled prefers-reduced-motion.</td></tr>
 							</tbody>
 						</table>
