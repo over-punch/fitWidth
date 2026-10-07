@@ -101,7 +101,7 @@ const opts: FitWidthOptions = {
 
 ### Font size, and what the fit did (1.2.0)
 
-> **1.2.0 is not on npm yet.** npm has 1.1.0. Everything marked *(1.2.0)* below is in this repository and runs on [fitwidth.com](https://fitwidth.com); the defaults are unchanged from 1.1.0.
+> Everything marked *(1.2.0)* is new in 1.2.0 and opt-in or additive: the defaults are unchanged from 1.1.0 (1,008 fits through both versions wrote identical styles).
 
 ```ts
 import { applyFitWidth, type FitWidthResult } from '@overpunch/fitwidth'
