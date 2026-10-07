@@ -34,13 +34,15 @@ export function useFitWidth(options: FitWidthOptions = {}, refitKey?: unknown) {
 	const mountedRef = useRef(true)
 
 	// Destructure options that should trigger a re-run when they change
-	const { target, prefer, axis, axisMin, axisMax, maxTracking, tolerance, respectReducedMotion } = options
+	const { target, prefer, axis, axisMin, axisMax, maxTracking, tolerance, respectReducedMotion, size } = options
+	// `size` may be an inline object: compare it by value so it doesn't refit on every render.
+	const sizeKey = size && typeof size === 'object' ? `${size.min},${size.max}` : size
 
 	const run = useCallback(() => {
 		const el = ref.current
 		if (!el) return
 		applyFitWidth(el, optionsRef.current)
-	}, [target, prefer, axis, axisMin, axisMax, maxTracking, tolerance, respectReducedMotion, refitKey])
+	}, [target, prefer, axis, axisMin, axisMax, maxTracking, tolerance, respectReducedMotion, sizeKey, refitKey])
 
 	// Keep mountedRef current alongside the component lifecycle
 	useEffect(() => {

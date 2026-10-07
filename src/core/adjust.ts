@@ -2,9 +2,10 @@
 // Measurement runs through the MeasureBackend interface (from @overpunch/measure-core), so the
 // same search ports to non-DOM hosts (Figma temp node, InDesign composer). The DOM path measures
 // candidates on a hidden clone of the element beside it, writing the visible element only once.
+// Stages: the axis, then (opt-in) font size, then letter-spacing; the result says what each did.
 
 import type { MeasureBackend, Size, TextStyle } from '@overpunch/measure-core'
-import type { FitWidthOptions } from './types'
+import type { FitWidthLimit, FitWidthOptions, FitWidthResult } from './types'
 
 // ─── Saved-state registry ─────────────────────────────────────────────────────
 
@@ -14,10 +15,12 @@ interface SavedStyles {
 	fvs: string
 	/** el.style.letterSpacing before fitWidth wrote it (updated if the author changes it later) */
 	letterSpacing: string
+	/** el.style.fontSize before fitWidth wrote it (only written when the `size` option is on) */
+	fontSize: string
 	/** Whether the element had a style attribute at all, so removeFitWidth can leave it as found */
 	hadStyleAttr: boolean
 	/** The values fitWidth last wrote; a different value found later was set by the author */
-	written: { fvs: string; letterSpacing: string } | null
+	written: { fvs: string; letterSpacing: string; fontSize: string } | null
 }
 
 /**
@@ -38,6 +41,29 @@ const DEFAULTS = {
 	axisMax: 125,
 	maxTracking: 0.3,
 	tolerance: 0.5,
+}
+
+/** Default letter-spacing cap (em) when `size` is on: font size does the coarse fit, so tracking stays small. */
+const SIZED_MAX_TRACKING = 0.05
+
+/** Default font-size multipliers for `size: true`. */
+const SIZE_RANGE = { min: 0.5, max: 2 }
+
+/** Font-size candidates are floored to this many px, so the written value is one that was measured. */
+const SIZE_STEP = 0.01
+
+/**
+ * Resolve the `size` option to a pair of font-size multipliers, or null when sizing is off or invalid.
+ */
+function resolveSize(size: FitWidthOptions['size']): { min: number; max: number } | null {
+	if (!size) return null
+	const min = size === true ? SIZE_RANGE.min : size.min ?? SIZE_RANGE.min
+	const max = size === true ? SIZE_RANGE.max : size.max ?? SIZE_RANGE.max
+	if (!(Number.isFinite(min) && Number.isFinite(max) && min > 0 && max >= min)) {
+		warnOnce('size', `[fitWidth] size needs positive multipliers with min <= max; got ${JSON.stringify(size)}. Font size left alone`)
+		return null
+	}
+	return { min, max }
 }
 
 /**
@@ -97,6 +123,8 @@ class CloneMeasureBackend implements MeasureBackend {
 	private clone: HTMLElement
 	/** Transform scale of the parent, so widths come back in layout px. */
 	private scale: number
+	/** The clone's own inline font-size (the author's), restored when a trial has no fontSize. */
+	private inlineFontSize: string
 
 	/**
 	 * @param el          - The element to fit
@@ -118,12 +146,14 @@ class CloneMeasureBackend implements MeasureBackend {
 		} as Partial<CSSStyleDeclaration>)
 		el.insertAdjacentElement('afterend', clone)
 		this.clone = clone
+		this.inlineFontSize = clone.style.fontSize
 		this.scale = el.parentElement ? layoutScale(el.parentElement) : 1
 	}
 
 	/** Width of the element (border box, layout px) with the trial style; `text` is the element's own. */
 	measureText(_text: string, style: TextStyle): Size {
 		this.clone.style.fontVariationSettings = style.fontVariationSettings ?? ''
+		this.clone.style.fontSize = style.fontSize ? `${style.fontSize}px` : this.inlineFontSize
 		this.clone.style.letterSpacing = style.letterSpacing ? `calc(${this.baseSpacing} + ${style.letterSpacing}px)` : this.baseSpacing
 		const rect = this.clone.getBoundingClientRect()
 		return { width: rect.width / this.scale, height: rect.height / this.scale }
@@ -225,7 +255,13 @@ function searchAxis(
 		}
 
 		if (i === 0) widestWidth = measured
-		if (i === 0 && gap <= 0) break // widest value still fits: use it
+		if (i === 0 && gap <= 0) {
+			// Widest value still fits: use it. One more measurement tells a short range from an axis
+			// the font doesn't have (the narrow end measures the same).
+			const narrow = backend.measureText(text, { fontVariationSettings: overrideAxis(baseFVS, axis, axisMin, axisPattern) }).width
+			if (Math.abs(narrow - measured) < 0.01) return { value: bestValue, gap: bestGap, fvs: bestFVS, inert: true }
+			break
+		}
 		if (i === 1) {
 			// The axis doesn't change the width at all: the font doesn't have it (or it's static).
 			if (Math.abs(measured - widestWidth) < 0.01) return { value: bestValue, gap: bestGap, fvs: bestFVS, inert: true }
@@ -257,10 +293,11 @@ function searchTracking(
 	tolerance: number,
 	targetWidth: number,
 	maxIterations = 20,
+	sizedPx?: number,
 ): { value: number; gap: number } {
 	// Without a positive font size we cannot convert em → px — leave tracking at 0.
 	if (!(fontSizePx > 0)) {
-		const measured = backend.measureText(text, { fontVariationSettings: fvs, letterSpacing: 0 }).width
+		const measured = backend.measureText(text, { fontVariationSettings: fvs, letterSpacing: 0, fontSize: sizedPx }).width
 		return { value: 0, gap: measured - targetWidth }
 	}
 
@@ -274,6 +311,7 @@ function searchTracking(
 		const measured = backend.measureText(text, {
 			fontVariationSettings: fvs,
 			letterSpacing: mid * fontSizePx,  // em → px
+			fontSize: sizedPx,
 		}).width
 		const gap = measured - targetWidth
 
@@ -293,30 +331,78 @@ function searchTracking(
 	return { value: bestValue, gap: bestGap }
 }
 
+/**
+ * Binary search the font size (px) to close a width gap the axis couldn't.
+ * Tries the ends first: if the largest size still falls short (or the smallest still overflows),
+ * that end is the answer. Candidates are floored to SIZE_STEP px so the returned value was measured.
+ */
+function searchSize(
+	backend: MeasureBackend,
+	text: string,
+	fvs: string,
+	minPx: number,
+	maxPx: number,
+	tolerance: number,
+	targetWidth: number,
+	maxIterations = 20,
+): { value: number; gap: number; limit: FitWidthLimit } {
+	const quantize = (v: number) => Math.max(SIZE_STEP, Math.floor(v / SIZE_STEP) * SIZE_STEP)
+	const gapAt = (px: number) => backend.measureText(text, { fontVariationSettings: fvs, fontSize: px }).width - targetWidth
+
+	const hi0 = quantize(maxPx)
+	const hiGap = gapAt(hi0)
+	if (hiGap <= 0) return { value: hi0, gap: hiGap, limit: 'max' } // largest size still fits: use it
+	const lo0 = quantize(minPx)
+	const loGap = gapAt(lo0)
+	if (loGap > 0) return { value: lo0, gap: loGap, limit: 'min' } // smallest size still overflows: use it
+
+	let lo = lo0
+	let hi = hi0
+	let bestValue = lo0
+	let bestGap = loGap
+	for (let i = 0; i < maxIterations; i++) {
+		if (bestGap <= 0 && bestGap >= -tolerance) break
+		const mid = quantize((lo + hi) / 2)
+		if (mid <= lo) break // out of font-size resolution
+		const gap = gapAt(mid)
+		if (isBetter(gap, bestGap)) {
+			bestValue = mid
+			bestGap = gap
+		}
+		// Larger font size → wider text
+		if (gap < 0) lo = mid
+		else hi = mid
+	}
+	return { value: bestValue, gap: bestGap, limit: null }
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Fit a display headline element to an exact target width by binary-searching
- * the width variable font axis and/or letter-spacing.
+ * Fit a single-line display element to a target width by binary-searching the width variable font
+ * axis, then (only with the `size` option) font size, then letter-spacing.
  *
  * Does NOT wrap content in spans or rewrite innerHTML — only sets
- * el.style.fontVariationSettings and el.style.letterSpacing, once, after the search.
+ * el.style.fontVariationSettings, el.style.letterSpacing and (with `size`) el.style.fontSize,
+ * once, after the search.
  *
  * Calling applyFitWidth multiple times is idempotent: original styles are saved
  * on the first call and reset internally before each re-fit.
  *
  * @param el      - Single-line display element (headline, pull-quote, masthead)
  * @param options - FitWidthOptions (merged with defaults)
+ * @returns What the fit did (widths, the value each stage ended on, and whether the text fits),
+ *          or null when nothing was fitted (no window, empty text, invalid options, reduced motion).
  */
-export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): void {
-	if (typeof window === 'undefined') return
+export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): FitWidthResult | null {
+	if (typeof window === 'undefined') return null
 
 	// Honour prefers-reduced-motion: skip the fit if the user has requested it
 	if (
 		options.respectReducedMotion &&
 		typeof window.matchMedia === 'function' &&
 		window.matchMedia('(prefers-reduced-motion: reduce)').matches
-	) return
+	) return null
 
 	// Save scroll position — iOS Safari ignores overflow-anchor: none
 	const scrollY = window.scrollY
@@ -326,40 +412,42 @@ export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): v
 	const axis = options.axis ?? DEFAULTS.axis
 	const axisMin = options.axisMin ?? DEFAULTS.axisMin
 	const axisMax = options.axisMax ?? DEFAULTS.axisMax
-	const maxTracking = options.maxTracking ?? DEFAULTS.maxTracking
+	const sizeRange = resolveSize(options.size)
+	const maxTracking = options.maxTracking ?? (sizeRange ? SIZED_MAX_TRACKING : DEFAULTS.maxTracking)
 	const rawTolerance = options.tolerance ?? DEFAULTS.tolerance
 	const tolerance = Number.isFinite(rawTolerance) && rawTolerance >= 0 ? rawTolerance : DEFAULTS.tolerance
 	if (tolerance !== rawTolerance) warnOnce('tolerance', `[fitWidth] tolerance must be a non-negative number; got ${rawTolerance}, using ${DEFAULTS.tolerance}`)
 	if (typeof axis !== 'string' || !/^[A-Za-z0-9 ]{4}$/.test(axis)) {
 		console.warn(`[fitWidth] axis must be a four-character tag such as 'wdth'; got ${JSON.stringify(axis)}`)
-		return
+		return null
 	}
 	if (typeof options.target === 'number' && !(Number.isFinite(options.target) && options.target > 0)) {
 		console.warn(`[fitWidth] target must be a positive number of px; got ${options.target}`)
-		return
+		return null
 	}
 
 	// Validate numeric options — guard against NaN/Infinity/swapped ranges
 	if (!isFinite(axisMin) || !isFinite(axisMax)) {
 		console.warn(`[fitWidth] axisMin and axisMax must be finite numbers; got ${axisMin}, ${axisMax}`)
-		return
+		return null
 	}
 	if (!isFinite(maxTracking) || maxTracking < 0) {
 		console.warn(`[fitWidth] maxTracking must be a finite non-negative number; got ${maxTracking}`)
-		return
+		return null
 	}
 
 	// Pre-compile the axis regex pattern once for this call
 	const axisPattern = makeAxisPattern(axis)
 
 	// Nothing to fit: leave the element untouched.
-	if (!(el.textContent ?? '').trim()) return
+	if (!(el.textContent ?? '').trim()) return null
 
 	// Save original inline styles on first call (idempotent for subsequent calls)
 	if (!savedStyles.has(el)) {
 		savedStyles.set(el, {
 			fvs: el.style.fontVariationSettings,
 			letterSpacing: el.style.letterSpacing,
+			fontSize: el.style.fontSize,
 			hadStyleAttr: el.hasAttribute('style'),
 			written: null,
 		})
@@ -372,56 +460,90 @@ export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): v
 	if (saved.written) {
 		if (el.style.fontVariationSettings !== saved.written.fvs) saved.fvs = el.style.fontVariationSettings
 		if (el.style.letterSpacing !== saved.written.letterSpacing) saved.letterSpacing = el.style.letterSpacing
+		if (el.style.fontSize !== saved.written.fontSize) saved.fontSize = el.style.fontSize
 	}
 	el.style.fontVariationSettings = saved.fvs
 	el.style.letterSpacing = saved.letterSpacing
+	if (el.style.fontSize !== saved.fontSize) el.style.fontSize = saved.fontSize
 
 	// Resolve target width (read AFTER reset so parent geometry is stable)
 	const targetWidth = resolveTarget(el, options.target)
-	if (targetWidth <= 0) return
+	if (targetWidth <= 0) return null
 
 	// Batch computed-style reads before the search
 	const cs = getComputedStyle(el)
 	const baseFVS = cs.fontVariationSettings
 	const fontSize = parseFloat(cs.fontSize)
 	const text = el.textContent ?? ''
-	// Tracking is added to the author's letter-spacing rather than replacing it.
-	const baseSpacing = !cs.letterSpacing || cs.letterSpacing === 'normal' ? '0px' : cs.letterSpacing
+	// Tracking is added to the author's letter-spacing rather than replacing it. When font size can
+	// change, the author's spacing is carried in em so it scales with the fitted size.
+	const basePx = !cs.letterSpacing || cs.letterSpacing === 'normal' ? 0 : parseFloat(cs.letterSpacing) || 0
+	const sizing = !!sizeRange && fontSize > 0
+	const baseSpacing = basePx === 0
+		? '0px'
+		: sizing ? `${+(basePx / fontSize).toFixed(5)}em` : cs.letterSpacing
 	const spacing = (em: number) => (baseSpacing === '0px' ? `${em}em` : `calc(${baseSpacing} + ${em}em)`)
 
 	// Measure candidates on a hidden clone of this element, so the visible element is written
 	// only once (no search-time flicker/thrash).
 	const backend = new CloneMeasureBackend(el, baseSpacing)
+	const inRange = (gap: number) => gap <= 0 && gap >= -tolerance
 	let finalGap = 0
+	let natural = 0
+	let fvs = baseFVS
+	let axisValue: number | null = null
+	let sizePx = fontSize
+	let tracking = 0
+	let afterAxis = 0
+	let afterSize = 0
+	const limits: FitWidthResult['limits'] = { axis: null, size: null, tracking: null }
 	try {
-		if (prefer === 'tracking') {
-			// Tracking-only: search letter-spacing, leave font-variation-settings alone
-			const { value, gap } = searchTracking(backend, text, baseFVS, fontSize, maxTracking, tolerance, targetWidth)
-			el.style.letterSpacing = spacing(value)
-			finalGap = gap
-		} else if (prefer === 'axis') {
-			// Axis-only: no tracking added
-			const { fvs, gap, inert } = searchAxis(backend, text, baseFVS, axis, axisPattern, axisMin, axisMax, tolerance, targetWidth)
-			if (inert) warnOnce('inert:' + axis, `[fitWidth] the "${axis}" axis doesn't change this font's width (the font may not have it); prefer: 'axis' can't fit the text`)
+		natural = backend.measureText(text, { fontVariationSettings: baseFVS }).width
+		finalGap = natural - targetWidth
+
+		// Stage 1 — the axis, at the size the author set (skipped for prefer: 'tracking')
+		if (prefer !== 'tracking') {
+			const a = searchAxis(backend, text, baseFVS, axis, axisPattern, axisMin, axisMax, tolerance, targetWidth)
+			if (a.inert && prefer === 'axis' && !sizing) warnOnce('inert:' + axis, `[fitWidth] the "${axis}" axis doesn't change this font's width (the font may not have it); prefer: 'axis' can't fit the text`)
+			fvs = a.fvs
+			axisValue = a.value
+			finalGap = a.gap
+			limits.axis = a.inert ? 'inert' : inRange(a.gap) ? null : a.value <= axisMin ? 'min' : a.value >= axisMax ? 'max' : null
 			el.style.fontVariationSettings = fvs
-			finalGap = gap
-		} else {
-			// Auto: axis first, then close any remaining gap with letter-spacing
-			const { fvs, gap } = searchAxis(backend, text, baseFVS, axis, axisPattern, axisMin, axisMax, tolerance, targetWidth)
-			el.style.fontVariationSettings = fvs
-			finalGap = gap
-			if (gap > 0 || gap < -tolerance) {
-				const t = searchTracking(backend, text, fvs, fontSize, maxTracking, tolerance, targetWidth)
-				el.style.letterSpacing = spacing(t.value)
-				finalGap = t.gap
-			}
 		}
+		afterAxis = finalGap + targetWidth
+
+		// Stage 2 — font size, only with the `size` option and only if the axis couldn't reach the target
+		if (sizing && sizeRange && !inRange(finalGap)) {
+			const s = searchSize(backend, text, fvs, fontSize * sizeRange.min, fontSize * sizeRange.max, tolerance, targetWidth)
+			sizePx = s.value
+			finalGap = s.gap
+			limits.size = inRange(s.gap) ? null : s.limit
+		}
+		afterSize = finalGap + targetWidth
+		const sized = sizePx !== fontSize ? sizePx : undefined
+
+		// Stage 3 — letter-spacing closes what is left (skipped for prefer: 'axis')
+		// (prefer: 'tracking' without `size` always searches, as it did before the size stage existed.)
+		if (prefer !== 'axis' && (!inRange(finalGap) || (prefer === 'tracking' && !sizing))) {
+			const t = searchTracking(backend, text, fvs, sizePx, maxTracking, tolerance, targetWidth, 20, sized)
+			tracking = t.value
+			finalGap = t.gap
+			// Not on target and not at the cap either: the width jumps past the target between two
+			// neighbouring values (any letter-spacing turns a font's ligatures off), so none lands on it.
+			limits.tracking = inRange(t.gap) ? null : Math.abs(t.value) < maxTracking * 0.999 ? 'stepped' : t.value < 0 ? 'min' : 'max'
+			el.style.letterSpacing = spacing(t.value)
+		} else if (sized !== undefined && baseSpacing !== '0px') {
+			// The clone was measured with the author's spacing in em: write the same on the element.
+			el.style.letterSpacing = baseSpacing
+		}
+		if (sized !== undefined) el.style.fontSize = `${+sized.toFixed(2)}px`
 	} finally {
 		backend.dispose()
 	}
-	saved.written = { fvs: el.style.fontVariationSettings, letterSpacing: el.style.letterSpacing }
+	saved.written = { fvs: el.style.fontVariationSettings, letterSpacing: el.style.letterSpacing, fontSize: el.style.fontSize }
 	if (finalGap > 0.5) {
-		warnOnce('overflow', `[fitWidth] the text is still ${finalGap.toFixed(1)}px wider than its target at the end of the axis and tracking ranges (widen axisMin/axisMax or maxTracking)`)
+		warnOnce('overflow', `[fitWidth] the text is still ${finalGap.toFixed(1)}px wider than its target at the end of the axis and tracking ranges (widen axisMin/axisMax or maxTracking${sizing ? '' : ', or turn on size'})`)
 	}
 
 	// Restore scroll after style mutations
@@ -430,6 +552,25 @@ export function applyFitWidth(el: HTMLElement, options: FitWidthOptions = {}): v
 			window.scrollTo({ top: scrollY, behavior: 'instant' })
 		}
 	})
+
+	const width = finalGap + targetWidth
+	const ratio = (after: number, before: number) => (before > 0 && after > 0 ? after / before : 1)
+	const result: FitWidthResult = {
+		target: targetWidth,
+		natural,
+		width,
+		gap: finalGap,
+		// 'fit' means never wider than the target: anything over it (beyond float noise) is an overflow.
+		status: finalGap > 0.01 ? 'overflow' : finalGap < -tolerance - 0.01 ? 'short' : 'fit',
+		axis: prefer === 'tracking' ? null : axis,
+		axisValue,
+		fontSize: sizePx,
+		tracking,
+		ratios: { axis: ratio(afterAxis, natural), size: ratio(afterSize, afterAxis), tracking: ratio(width, afterSize) },
+		limits,
+	}
+	options.onFit?.(result)
+	return result
 }
 
 /**
@@ -443,6 +584,7 @@ export function removeFitWidth(el: HTMLElement): void {
 	if (!saved) return
 	el.style.fontVariationSettings = saved.fvs
 	el.style.letterSpacing = saved.letterSpacing
+	if (el.style.fontSize !== saved.fontSize) el.style.fontSize = saved.fontSize
 	// Leave no empty style="" behind on an element that had no style attribute.
 	if (!saved.hadStyleAttr && !el.getAttribute('style')) el.removeAttribute('style')
 	savedStyles.delete(el)

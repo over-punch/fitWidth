@@ -23,6 +23,7 @@ const tracked = new Set<HTMLElement>()
  *   data-fw-axis-max     — axis search upper bound
  *   data-fw-max-tracking — max absolute letter-spacing in em
  *   data-fw-tolerance    — convergence tolerance in px
+ *   data-fw-size         — 'true' (font size may go 0.5×–2×), or a range such as '0.6-1.5'
  *
  * @param el - The opted-in element
  */
@@ -45,6 +46,13 @@ function readOptions(el: HTMLElement): FitWidthOptions {
 	if (d.fwAxisMax !== undefined) { const n = parseFloat(d.fwAxisMax); if (!isNaN(n)) opts.axisMax = n }
 	if (d.fwMaxTracking !== undefined) { const n = parseFloat(d.fwMaxTracking); if (!isNaN(n)) opts.maxTracking = n }
 	if (d.fwTolerance !== undefined) { const n = parseFloat(d.fwTolerance); if (!isNaN(n)) opts.tolerance = n }
+	if (d.fwSize !== undefined) {
+		const raw = d.fwSize.trim().toLowerCase()
+		// Accepts a hyphen, an en or em dash, a comma or a space between the two multipliers.
+		const range = /^([\d.]+)\s*[-–—,\s]\s*([\d.]+)$/.exec(raw)
+		if (range) opts.size = { min: parseFloat(range[1]), max: parseFloat(range[2]) }
+		else if (raw === '' || raw === 'true') opts.size = true
+	}
 
 	return opts
 }

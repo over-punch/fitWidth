@@ -1,4 +1,4 @@
-// fitWidth/src/core/types.ts — options interface for the fitWidth tool
+// fitWidth/src/core/types.ts — options and result interfaces for the fitWidth tool
 
 /** Options controlling the fitWidth effect */
 export interface FitWidthOptions {
@@ -36,9 +36,23 @@ export interface FitWidthOptions {
 
 	/**
 	 * Maximum absolute letter-spacing in em added on top of the author's own (clamped to ±this value).
-	 * Default: 0.3. Note that −0.3em can squeeze glyphs into each other; lower it for body faces.
+	 * Default: 0.3, or 0.05 when `size` is on (font size then does the coarse fit, so tracking only
+	 * closes a small remainder). Note that −0.3em can squeeze glyphs into each other; lower it for body faces.
 	 */
 	maxTracking?: number
+
+	/**
+	 * Let font size take over when the axis range runs out. Default: false (font size is never changed).
+	 *
+	 * - **true** — font size may go from 0.5× to 2× the element's own size
+	 * - **{ min, max }** — the same, with your own multipliers (min ≤ 1 ≤ max is usual, e.g. `{ min: 0.6, max: 1.5 }`)
+	 *
+	 * The order is: the axis first, at the size you set; then font size, only if the axis range can't
+	 * reach the target; then letter-spacing, only if font size hits its limit. The fit writes
+	 * `font-size` inline (in px) and `removeFitWidth` restores it. A changed font size changes the
+	 * element's height, so leave room for it.
+	 */
+	size?: boolean | { min?: number; max?: number }
 
 	/**
 	 * Convergence tolerance in pixels. The fitted text is never wider than the target and at most
@@ -52,4 +66,51 @@ export interface FitWidthOptions {
 	 * letter-spacing or font-variation-settings. Default: false.
 	 */
 	respectReducedMotion?: boolean
+
+	/**
+	 * Called after every fit with what the fit did (the same object `applyFitWidth` returns).
+	 * Use it to log or display how much of the fit came from the axis, font size and tracking.
+	 */
+	onFit?: (result: FitWidthResult) => void
+}
+
+/** Where a stage of the fit ended: at an end of its range, or null when it stopped inside it. */
+export type FitWidthLimit = 'min' | 'max' | null
+
+/** What one fit did. Widths are in layout px; ratios are width multipliers. */
+export interface FitWidthResult {
+	/** The target width */
+	target: number
+	/** The text's width as authored, before any fitting */
+	natural: number
+	/** The text's width after the fit */
+	width: number
+	/** width − target: 0 to −tolerance when the text fits; more negative when it falls short; positive when it overflows */
+	gap: number
+	/**
+	 * - **'fit'** — within tolerance of the target (never wider)
+	 * - **'short'** — every enabled range ran out before the text reached the target
+	 * - **'overflow'** — every enabled range ran out and the text is still wider than the target
+	 */
+	status: 'fit' | 'short' | 'overflow'
+	/** The axis tag searched, or null when the axis wasn't used (`prefer: 'tracking'`) */
+	axis: string | null
+	/** The axis value written, or null when the axis wasn't used */
+	axisValue: number | null
+	/** The font size after the fit, in px (the element's own size when `size` is off) */
+	fontSize: number
+	/** Letter-spacing added by the fit, in em (0 when none was added) */
+	tracking: number
+	/**
+	 * The width multiplier each stage contributed. Their product is `width / natural`.
+	 * A value of 1 means the stage did nothing.
+	 */
+	ratios: { axis: number; size: number; tracking: number }
+	/**
+	 * Where each stage ended. `axis` is 'inert' when the axis doesn't change this font's width
+	 * (the font doesn't have it). `tracking` is 'stepped' when no letter-spacing value lands on the
+	 * target: any non-zero letter-spacing turns a font's ligatures off, which jumps the width, and a
+	 * target inside that jump can't be reached by tracking. A stage that wasn't used is null.
+	 */
+	limits: { axis: FitWidthLimit | 'inert'; size: FitWidthLimit; tracking: FitWidthLimit | 'stepped' }
 }
