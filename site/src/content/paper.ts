@@ -165,7 +165,7 @@ applyFitWidth(el, { size: true })
 // then at most ±0.05em of letter-spacing
 \`\`\`
 
-It also returns what each step did (the axis value, the font size, the tracking, the width each contributed and whether the text fits), which is where every number in the [demo](/#demo) comes from.
+It also returns what each step did (the axis value, the font size, the tracking, the width each contributed and whether the text fits), which is where the figures under each row of the [demo](/#demo) come from.
 
 ## Limits
 

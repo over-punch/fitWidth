@@ -48,4 +48,20 @@ describe('Webflow embed: data-fw-size', () => {
 		expect(dashed.style.fontSize).toBe('130px') // an en dash works too
 		expect(junk.style.fontSize).toBe('100px')
 	})
+
+	it('reads data-fw-trim into trimTrailingSpace (inline-block elements only)', async () => {
+		restore = mockLayout(600)
+		const { init } = await import('../webflow/embed')
+		const trimmed = make({ 'data-fitwidth': '', 'data-fw-trim': 'true' })
+		trimmed.style.display = 'inline-block'
+		const off = make({ 'data-fitwidth': '', 'data-fw-trim': 'false' })
+		off.style.display = 'inline-block'
+		const warn = console.warn as unknown as { mock: { calls: string[][] } }
+		init()
+		// The mocked heading ignores letter-spacing, so nothing is written; the option must still be
+		// accepted without the "needs an element that sizes itself" warning on an inline-block element.
+		expect(warn.mock.calls.some((c) => String(c[0]).includes('trimTrailingSpace'))).toBe(false)
+		expect(off.style.marginRight).toBe('')
+		expect(trimmed.style.fontSize).toBe('100px')
+	})
 })
